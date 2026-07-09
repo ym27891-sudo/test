@@ -8,7 +8,8 @@
 
    <h3>macbook air m2</h3>
    <p>price :<strong>1300$</strong> </p>
-
+<p><Strong>warning!no <i>payment<i> by paLPAY<STRONG/> <p>
 
 </body>
-</html>
+</htmL>
+      

@@ -12,4 +12,7 @@
 
 </body>
 </htmL>
-      
+
+...<img src="https://www.udacity.com/blog/wp-contant/uploads/2020/06/html-Blog-scaled.jpg
+img src="img/test/img.jpg"alt="logo">
+

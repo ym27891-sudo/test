@@ -3,45 +3,64 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>AeroCity 3D — لعبة العالم المفتوح، الطيران والأسلحة والدفاع الجوي</title>
+  <title>AeroCity VI: Vice Edition — عالم مفتوح، واقعية GTA VI، تحكم ماوس كامل 360°</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Inter:wght@500;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
     html, body {
       margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
-      background: #060b14; font-family: 'Cairo', sans-serif; color: #f8fafc;
+      background: #05070e; font-family: 'Cairo', 'Inter', sans-serif; color: #f8fafc;
     }
     .mono { font-family: 'JetBrains Mono', monospace; }
     #game-container { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
-    #webgl-canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    #webgl-canvas {
+      display: block; width: 100%; height: 100%; cursor: crosshair;
+      filter: contrast(1.06) saturate(1.18);
+    }
+    .vice-vignette {
+      pointer-events: none;
+      background:
+        radial-gradient(circle at center, transparent 58%, rgba(15, 6, 28, 0.42) 90%, rgba(5, 2, 12, 0.78) 100%),
+        linear-gradient(180deg, rgba(244, 63, 94, 0.06) 0%, transparent 25%, transparent 80%, rgba(14, 165, 233, 0.07) 100%);
+    }
     .glass-panel {
-      background: rgba(10, 17, 30, 0.8);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(148, 163, 184, 0.22);
-      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.65);
+      background: rgba(9, 13, 26, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(244, 114, 182, 0.25);
+      box-shadow: 0 12px 32px -6px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .vice-gradient-text {
+      background: linear-gradient(90deg, #f472b6, #fb923c, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
     .cockpit-overlay {
       pointer-events: none;
       background: radial-gradient(circle at center, transparent 52%, rgba(2, 6, 23, 0.72) 88%, rgba(2, 6, 23, 0.95) 100%);
     }
-    .hud-glow { text-shadow: 0 0 8px rgba(56, 189, 248, 0.7); }
+    .hud-glow { text-shadow: 0 0 10px rgba(56, 189, 248, 0.75); }
     .hud-green { color: #4ade80; text-shadow: 0 0 8px rgba(74, 222, 128, 0.65); }
-    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
-    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.4); border-radius: 9999px; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(244, 114, 182, 0.45); border-radius: 9999px; }
     @keyframes pulse-ring {
-      0% { transform: scale(0.95); opacity: 0.9; }
-      50% { transform: scale(1.06); opacity: 1; }
-      100% { transform: scale(0.95); opacity: 0.9; }
+      0% { transform: scale(0.96); opacity: 0.9; }
+      50% { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(0.96); opacity: 0.9; }
     }
     @keyframes danger-flash {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.35; transform: scale(0.98); }
+      0%, 100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+      50% { opacity: 0.35; transform: translate(-50%, 0) scale(0.98); }
     }
-    .interact-pulse { animation: pulse-ring 1.5s infinite ease-in-out; }
+    @keyframes wanted-blink {
+      0%, 100% { opacity: 1; filter: drop-shadow(0 0 8px #facc15); }
+      50% { opacity: 0.45; filter: drop-shadow(0 0 12px #ef4444); }
+    }
+    .interact-pulse { animation: pulse-ring 1.4s infinite ease-in-out; }
     .sam-alert { animation: danger-flash 0.55s infinite ease-in-out; }
+    .wanted-active { animation: wanted-blink 0.9s infinite ease-in-out; }
   </style>
 </head>
 <body>
@@ -49,20 +68,36 @@
     <!-- Three.js 3D Viewport -->
     <canvas id="webgl-canvas"></canvas>
 
-    <!-- Center Aiming Crosshair & Target Lock Reticle -->
+    <!-- GTA VI Cinematic Vignette & Color Grade Overlay -->
+    <div class="vice-vignette absolute inset-0 z-10"></div>
+
+    <!-- Damage / Nitro Screen Flash Overlay -->
+    <div id="screen-fx-overlay" class="pointer-events-none absolute inset-0 z-10 transition-opacity duration-150 opacity-0"></div>
+
+    <!-- Center Aiming Crosshair, ADS Zoom & Hitmarker -->
     <div id="aim-crosshair" class="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
-      <div class="relative w-12 h-12 flex items-center justify-center">
-        <div class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#4ade80]"></div>
-        <div class="absolute inset-0 border border-emerald-400/50 rounded-full"></div>
-        <div class="absolute w-3 h-0.5 bg-emerald-400/70 -left-2"></div>
-        <div class="absolute w-3 h-0.5 bg-emerald-400/70 -right-2"></div>
-        <div class="absolute h-3 w-0.5 bg-emerald-400/70 -top-2"></div>
-        <div class="absolute h-3 w-0.5 bg-emerald-400/70 -bottom-2"></div>
+      <div id="crosshair-ring" class="relative w-11 h-11 flex items-center justify-center transition-transform duration-100">
+        <div id="crosshair-dot" class="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_10px_#f472b6]"></div>
+        <div class="absolute inset-0 border border-white/60 rounded-full"></div>
+        <div class="absolute w-2.5 h-0.5 bg-pink-400/90 -left-2"></div>
+        <div class="absolute w-2.5 h-0.5 bg-pink-400/90 -right-2"></div>
+        <div class="absolute h-2.5 w-0.5 bg-pink-400/90 -top-2"></div>
+        <div class="absolute h-2.5 w-0.5 bg-pink-400/90 -bottom-2"></div>
+        <!-- Hitmarker X -->
+        <div id="hitmarker" class="hidden absolute inset-0 flex items-center justify-center text-rose-500 font-black text-xl drop-shadow-[0_0_8px_#ef4444]">✕</div>
       </div>
     </div>
 
+    <!-- Pointer Lock / Mouse Status Pill (Click Canvas to Lock Mouse 360) -->
+    <div id="mouse-lock-banner" class=" absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+      <button id="btn-lock-mouse" class="glass-panel px-4 py-1.5 rounded-full border border-pink-400/60 bg-slate-950/85 hover:bg-pink-950/60 text-xs font-bold text-pink-200 shadow-lg flex items-center gap-2 transition">
+        <span class="w-2 h-2 rounded-full bg-pink-400 animate-ping"></span>
+        <span id="mouse-lock-text">🖱️ اضغط هنا أو داخل الشاشة لتفعيل تحكم الماوس الحر 360° (GTA VI) — [ESC للخروج]</span>
+      </button>
+    </div>
+
     <!-- SAM Air Defense Missile Warning Banner -->
-    <div id="sam-warning-banner" class="hidden pointer-events-none absolute top-20 left-1/2 -translate-x-1/2 z-20 sam-alert">
+    <div id="sam-warning-banner" class="hidden pointer-events-none absolute top-28 left-1/2 z-20 sam-alert">
       <div class="px-5 py-2 rounded-xl bg-rose-950/90 border-2 border-rose-500 text-rose-200 font-black text-xs md:text-sm shadow-2xl flex items-center gap-2">
         <span>⚠️</span>
         <span id="sam-warning-text">تحذير: صاروخ دفاع جوي (SAM) يتتبعك! اضغط [X] لإطلاق الشعلات الحرارية!</span>
@@ -71,9 +106,9 @@
 
     <!-- Cockpit 1st-Person Frame & Attitude HUD -->
     <div id="cockpit-hud" class="hidden absolute inset-0 cockpit-overlay z-10 flex flex-col justify-between p-6">
-      <div class="w-full flex justify-between items-start">
+      <div class="w-full flex justify-between items-start mt-12">
         <div class="glass-panel px-3 py-1.5 rounded-lg border-emerald-500/40 text-xs hud-green mono">
-          SYS: GTA-FLIGHT ASSIST | WEAPONS: ARMED | RADAR: 360°
+          SYS: VICE-FLIGHT ASSIST | WEAPONS: HOT | RADAR: 360°
         </div>
         <div class="glass-panel px-4 py-1.5 rounded-lg border-emerald-500/40 text-sm font-bold hud-green mono" id="cockpit-compass">
           HDG 090° E
@@ -121,37 +156,49 @@
 
     <!-- Top Navigation & Status Bar -->
     <div class="absolute top-3 inset-x-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-      <!-- Game Brand + Current Mode + Health & Score -->
+      <!-- Game Brand + GTA VI Wanted Stars + Cash & Score -->
       <div class="glass-panel rounded-xl px-3.5 py-2 flex items-center gap-3 pointer-events-auto">
-        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-sky-500 to-blue-700 flex items-center justify-center shadow-lg shadow-sky-500/30">
-          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-          </svg>
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 via-orange-400 to-sky-500 flex items-center justify-center shadow-lg shadow-pink-500/30 font-black text-white text-sm tracking-tighter">
+          VI
         </div>
         <div>
-          <div class="flex items-center gap-2">
-            <span class="font-black text-sm md:text-base tracking-wide text-white">AERO<span class="text-sky-400">CITY</span> 3D</span>
-            <span id="mode-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-              وضع المشي الحر
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-black text-sm md:text-base tracking-wide vice-gradient-text">AEROCITY: VICE VI</span>
+            <span id="mode-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/40">
+              وضع المشي الحر (GTA TPS)
             </span>
-            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 mono">
-              ❤️ <span id="hud-health">100</span>%
+            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 mono">
+              $<span id="hud-cash">25,500</span>
             </span>
             <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 mono">
               🎯 <span id="hud-kills">0</span>
             </span>
+            <!-- GTA Wanted Stars -->
+            <div id="wanted-stars" class="flex items-center gap-0.5 text-sm px-1.5 py-0.5 rounded bg-slate-950/80 border border-slate-800">
+              <span class="text-slate-600">★</span>
+              <span class="text-slate-600">★</span>
+              <span class="text-slate-600">★</span>
+              <span class="text-slate-600">★</span>
+              <span class="text-slate-600">★</span>
+            </div>
           </div>
-          <p id="current-vehicle-label" class="text-xs text-slate-300">الشخصية: مقاتل وطيار المدينة (مسلح)</p>
+          <p id="current-vehicle-label" class="text-xs text-slate-300">حرك الماوس للنظر 360° | كليك يمين للتصويب | كليك يسار للإطلاق</p>
         </div>
       </div>
 
       <!-- Quick Action Toolbar -->
       <div class="glass-panel rounded-xl p-1.5 flex flex-wrap items-center gap-1.5 pointer-events-auto">
+        <button id="btn-vscode-guide" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-pink-600 to-orange-500 hover:from-pink-500 hover:to-orange-400 text-xs font-black text-white shadow-lg shadow-pink-500/25 transition flex items-center gap-1.5">
+          <span>💻</span><span>خطوات التعديل في VS Code [P]</span>
+        </button>
         <button id="btn-spawn-menu" class="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 border border-sky-400/40 text-xs font-bold text-sky-200 transition flex items-center gap-1.5">
-          <span>✈️</span><span>أسطول الطائرات والمركبات</span>
+          <span>🏎️</span><span>المركبات والطائرات</span>
+        </button>
+        <button id="btn-teleport-beach" class="px-2.5 py-1.5 rounded-lg bg-pink-500/20 hover:bg-pink-500/35 border border-pink-400/40 text-xs font-semibold text-pink-200 transition">
+          🌴 شاطئ فايس سيتي
         </button>
         <button id="btn-teleport-airport" class="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">
-          🛫 المطار الدولي
+          🛫 المطار
         </button>
         <button id="btn-teleport-city" class="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">
           🏙️ وسط المدينة
@@ -162,8 +209,8 @@
         <button id="btn-camera-mode" class="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-400/40 text-xs font-bold text-indigo-200 transition">
           🎥 الكاميرا: خلفية [C]
         </button>
-        <button id="btn-time-of-day" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/40 text-xs font-bold text-amber-200 transition">
-          ☀️ الوقت: نهار مشمس
+        <button id="btn-time-of-day" class="px-2.5 py-1.5 rounded-lg bg-amber-500/25 hover:bg-amber-500/40 border border-amber-400/50 text-xs font-bold text-amber-200 transition">
+          🌅 الجو: غروب GTA VI
         </button>
         <button id="btn-sound-toggle" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 text-xs font-bold text-emerald-200 transition">
           🔊 الصوت: مفعل
@@ -175,33 +222,33 @@
     </div>
 
     <!-- Right Panel: Live Telemetry, Weapons Arsenal & AI/SAM Combat Ecosystem -->
-    <div class="absolute top-20 right-3 z-20 w-64 md:w-76 flex flex-col gap-2 pointer-events-none">
+    <div class="absolute top-28 right-3 z-20 w-64 md:w-72 flex flex-col gap-2 pointer-events-none">
       <!-- Flight / Vehicle Telemetry Card -->
       <div class="glass-panel rounded-xl p-3 pointer-events-auto">
         <div class="flex items-center justify-between border-b border-slate-700/70 pb-1.5 mb-2">
-          <span class="text-xs font-bold text-sky-400">📊 عدادات القياس (تحكم GTA)</span>
-          <span id="telemetry-status" class="text-[11px] font-bold text-emerald-400">جاهز</span>
+          <span class="text-xs font-bold text-pink-400">📊 عدادات الفيزياء (GTA VI)</span>
+          <span id="telemetry-status" class="text-[11px] font-bold text-emerald-400">ماوس 360° جاهز</span>
         </div>
 
         <div class="grid grid-cols-2 gap-2 text-xs">
           <div class="bg-slate-900/75 rounded-lg p-2 border border-slate-800">
-            <div class="text-[10px] text-slate-400">السرعة</div>
-            <div class="text-base font-extrabold text-white mono"><span id="hud-speed">0</span> <span class="text-[10px] text-sky-400">كم/س</span></div>
+            <div class="text-[10px] text-slate-400">السرعة الفعلية</div>
+            <div class="text-base font-extrabold text-white mono"><span id="hud-speed">0</span> <span class="text-[10px] text-pink-400">كم/س</span></div>
           </div>
           <div class="bg-slate-900/75 rounded-lg p-2 border border-slate-800">
             <div class="text-[10px] text-slate-400">الارتفاع عن الأرض</div>
-            <div class="text-base font-extrabold text-white mono"><span id="hud-altitude">0</span> <span class="text-[10px] text-emerald-400">متر</span></div>
+            <div class="text-base font-extrabold text-white mono"><span id="hud-altitude">0</span> <span class="text-[10px] text-sky-400">متر</span></div>
           </div>
         </div>
 
-        <!-- Throttle Bar -->
+        <!-- Throttle / Nitro Bar -->
         <div class="mt-2">
           <div class="flex justify-between text-[11px] mb-1">
-            <span class="text-slate-300">قوة الدفع / المحرك (Throttle)</span>
+            <span class="text-slate-300">قوة الدفع / نيترو [Shift]</span>
             <span id="hud-throttle-pct" class="font-bold text-amber-400 mono">0%</span>
           </div>
           <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div id="hud-throttle-bar" class="h-full bg-gradient-to-l from-amber-400 via-sky-400 to-emerald-400 transition-all duration-75" style="width: 0%"></div>
+            <div id="hud-throttle-bar" class="h-full bg-gradient-to-l from-pink-500 via-amber-400 to-sky-400 transition-all duration-75" style="width: 0%"></div>
           </div>
         </div>
 
@@ -219,11 +266,11 @@
       <!-- Weapons & Arsenal Card -->
       <div class="glass-panel rounded-xl p-3 pointer-events-auto">
         <div class="flex items-center justify-between mb-1.5">
-          <span class="text-xs font-bold text-rose-400">🔫 ترسانة الأسلحة والذخيرة</span>
+          <span class="text-xs font-bold text-rose-400">🔫 عجلة الأسلحة (عجلة الماوس / 1-4)</span>
           <span id="active-weapon-label" class="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">رشاش هجومي M4</span>
         </div>
         <div class="grid grid-cols-4 gap-1 text-[10px] mb-2">
-          <button id="btn-wpn-1" class="py-1.5 px-1 rounded-lg bg-rose-500/30 border border-rose-400 text-white font-bold transition">
+          <button id="btn-wpn-1" class="py-1.5 px-1 rounded-lg bg-rose-500/35 border border-rose-400 text-white font-bold transition">
             [1] M4 رشاش
           </button>
           <button id="btn-wpn-2" class="py-1.5 px-1 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-300 hover:bg-slate-800 font-bold transition">
@@ -233,12 +280,12 @@
             [3] بازوكا RPG
           </button>
           <button id="btn-wpn-4" class="py-1.5 px-1 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-300 hover:bg-slate-800 font-bold transition">
-            [4] ليزر/مدفع
+            [4] بلازما
           </button>
         </div>
         <div class="flex items-center gap-1.5">
           <button id="btn-fire-weapon" class="flex-1 py-1.5 px-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-black transition shadow">
-            🔥 إطلاق نار [Z / كليك]
+            🔥 إطلاق [كليك يسار / Z]
           </button>
           <button id="btn-fire-missile" class="flex-1 py-1.5 px-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black transition shadow">
             🚀 صاروخ موجه [M]
@@ -249,7 +296,7 @@
       <!-- AI Bots & Air Defense Systems Card -->
       <div class="glass-panel rounded-xl p-3 pointer-events-auto">
         <div class="flex items-center justify-between mb-1.5">
-          <span class="text-xs font-bold text-amber-300">🤖 البوتات والدفاع الجوي (SAM)</span>
+          <span class="text-xs font-bold text-amber-300">🤖 العالم الحي والدفاع الجوي</span>
           <span id="bot-count-badge" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">40 نشط</span>
         </div>
         <div class="grid grid-cols-4 gap-1 text-center text-[10px] mb-2">
@@ -263,7 +310,7 @@
           </div>
           <div class="bg-slate-900/70 rounded p-1 border border-slate-800">
             <div class="text-purple-300 font-bold" id="bot-peds-count">14</div>
-            <div class="text-slate-400">شخصيات</div>
+            <div class="text-slate-400">مشاة</div>
           </div>
           <div class="bg-slate-900/70 rounded p-1 border border-slate-800">
             <div class="text-rose-400 font-bold" id="sam-sites-count">6</div>
@@ -272,38 +319,45 @@
         </div>
         <div class="flex flex-col gap-1 mb-2">
           <button id="btn-bot-mode" class="w-full py-1 px-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-[11px] font-bold text-amber-200 transition">
-            🎯 سلوك البوتات: حياة طبيعية + طيران حر
+            🎯 سلوك العالم: حياة طبيعية + طيران حر
           </button>
           <button id="btn-toggle-sam" class="w-full py-1 px-2 rounded-lg bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/40 text-[11px] font-bold text-rose-200 transition">
-            🛡️ منظومة الدفاع الجوي (SAM): نشطة وتطلق صواريخ
+            🛡️ منظومة الدفاع الجوي (SAM): نشطة
           </button>
         </div>
         <div id="bot-live-feed" class="text-[11px] text-slate-300 bg-slate-950/70 rounded-lg p-2 border border-slate-800/90 space-y-1 max-h-20 overflow-y-auto custom-scroll">
-          <div>🛡️ 6 بطاريات دفاع جوي (SAM) تراقب المجال الجوي</div>
-          <div>✈️ بوت [كابتن طارق] يقلع بمقاتلة F-22 من المدرج</div>
-          <div>👮 شخصيات متنوعة (طيارين، شرطة، جنود، مدنيين) تتجول بالمدينة</div>
+          <div>🌴 مرحباً بك في إصدار Vice VI المطور بواقعية وتحكم كامل بالماوس!</div>
+          <div>🖱️ اضغط داخل الشاشة لقفل الماوس والتحكم بالكاميرا 360°</div>
+          <div>🏎️ اضغط [Space] أثناء القيادة لعمل دريفت احترافي مع دخان الإطارات</div>
         </div>
       </div>
     </div>
 
-    <!-- Left Panel: Radar Minimap -->
+    <!-- Left Panel: GTA VI Radar Minimap + Health & Armor Bars -->
     <div class="absolute bottom-4 left-4 z-20 flex flex-col items-center gap-1.5 pointer-events-auto">
-      <div class="glass-panel rounded-2xl p-2 border border-sky-500/30 relative">
-        <canvas id="radar-canvas" width="155" height="155" class="rounded-xl bg-slate-950 block"></canvas>
-        <div class="mt-1 flex items-center justify-between text-[9px] px-1 text-slate-300 gap-1">
-          <span>🟢أنت</span>
-          <span>🔵طائرات</span>
-          <span>🔴دفاعSAM</span>
-          <span>🟣شخصيات</span>
+      <div class="glass-panel rounded-2xl p-2 border border-pink-500/35 relative shadow-2xl">
+        <canvas id="radar-canvas" width="160" height="160" class="rounded-xl bg-slate-950 block"></canvas>
+        <!-- GTA V / VI Style Health & Armor Bar directly under Radar -->
+        <div class="mt-2 grid grid-cols-2 gap-1.5">
+          <div class="h-2.5 bg-slate-900 rounded-sm overflow-hidden border border-slate-700/80">
+            <div id="hud-health-bar" class="h-full bg-emerald-500 transition-all duration-150" style="width: 100%"></div>
+          </div>
+          <div class="h-2.5 bg-slate-900 rounded-sm overflow-hidden border border-slate-700/80">
+            <div id="hud-armor-bar" class="h-full bg-sky-400 transition-all duration-150" style="width: 100%"></div>
+          </div>
+        </div>
+        <div class="mt-1 flex items-center justify-between text-[9px] px-1 text-slate-300">
+          <span>❤️ الصحة: <b id="hud-health">100</b>%</span>
+          <span>🛡️ الدرع: <b id="hud-armor">100</b>%</span>
         </div>
       </div>
     </div>
 
     <!-- Center Proximity Interaction Prompt (Board / Exit Vehicle) -->
     <div id="interaction-prompt" class="hidden absolute bottom-24 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
-      <button id="btn-interact-action" class="interact-pulse glass-panel px-5 py-2.5 rounded-2xl border-2 border-emerald-400/80 bg-emerald-950/80 text-white font-bold text-sm shadow-xl flex items-center gap-3 hover:bg-emerald-900 transition">
-        <span class="px-2.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 font-black mono">F</span>
-        <span id="interaction-text">اركب الطائرة</span>
+      <button id="btn-interact-action" class="interact-pulse glass-panel px-5 py-2.5 rounded-2xl border-2 border-pink-400/80 bg-slate-950/90 text-white font-bold text-sm shadow-xl flex items-center gap-3 hover:bg-pink-950 transition">
+        <span class="px-2.5 py-0.5 rounded-md bg-pink-500 text-white font-black mono">F</span>
+        <span id="interaction-text">اركب المركبة</span>
       </button>
     </div>
 
@@ -313,67 +367,163 @@
         <button id="btn-board-nearest" class="px-3 py-1.5 rounded-lg bg-emerald-500/25 hover:bg-emerald-500/40 border border-emerald-400/50 text-emerald-200 font-bold transition">
           🔑 ركوب / نزول [F]
         </button>
+        <button id="btn-quick-car" class="px-3 py-1.5 rounded-lg bg-pink-500/25 hover:bg-pink-500/40 border border-pink-400/50 text-pink-200 font-bold transition">
+          🏎️ سيارة Vice GT فوراً
+        </button>
         <button id="btn-quick-jet" class="px-3 py-1.5 rounded-lg bg-sky-500/25 hover:bg-sky-500/40 border border-sky-400/50 text-sky-200 font-bold transition">
-          🚀 استدعاء مقاتلة F-22 فوراً
+          🚀 مقاتلة F-22 فوراً
         </button>
         <button id="btn-quick-heli" class="px-3 py-1.5 rounded-lg bg-purple-500/25 hover:bg-purple-500/40 border border-purple-400/50 text-purple-200 font-bold transition">
-          🚁 استدعاء هليكوبتر فوراً
+          🚁 هليكوبتر أباتشي
         </button>
         <button id="btn-fire-flare" class="px-3 py-1.5 rounded-lg bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/50 text-rose-200 font-bold transition">
-          ✨ إطلاق شعلات حرارية [X]
+          ✨ شعلات حرارية [X]
         </button>
       </div>
     </div>
 
     <!-- Modal: Fleet & Vehicle Spawner -->
-    <div id="modal-fleet" class="hidden fixed inset-0 z-30 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4">
-      <div class="glass-panel rounded-2xl max-w-3xl w-full p-5 border border-sky-400/30 max-h-[88vh] flex flex-col">
+    <div id="modal-fleet" class="hidden fixed inset-0 z-30 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="glass-panel rounded-2xl max-w-3xl w-full p-5 border border-pink-400/30 max-h-[88vh] flex flex-col">
         <div class="flex items-center justify-between border-b border-slate-700 pb-3 mb-4">
           <div>
             <h2 class="text-lg font-black text-white flex items-center gap-2">
-              <span>✈️</span><span>أسطول الطائرات والمركبات المتاحة في العالم المفتوح</span>
+              <span>🏎️</span><span>أسطول سيارات وطائرات GTA VI Vice Edition</span>
             </h2>
-            <p class="text-xs text-slate-300 mt-0.5">جميع الطائرات مجهزة الآن بنظام طيران سلس على طريقة GTA ومدافع رشاشة وصواريخ موجهة!</p>
+            <p class="text-xs text-slate-300 mt-0.5">جميع المركبات تدعم الآن تحكم الماوس الحر 360°، الدريفت [Space]، النيترو [Shift]، والأسلحة!</p>
           </div>
           <button id="btn-close-fleet" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold">✕</button>
         </div>
 
-        <div id="fleet-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 overflow-y-auto custom-scroll pr-1">
-          <!-- Populated dynamically via JS -->
+        <div id="fleet-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 overflow-y-auto custom-scroll pr-1"></div>
+      </div>
+    </div>
+
+    <!-- Modal: VS Code Step-by-Step Replacement Guide ("ابحث عن / احذف / ضيف مكانه") -->
+    <div id="modal-vscode" class="hidden fixed inset-0 z-40 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="glass-panel rounded-2xl max-w-4xl w-full p-5 border border-pink-400/40 max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between border-b border-slate-700 pb-3 mb-3">
+          <div>
+            <h2 class="text-lg font-black text-white flex items-center gap-2">
+              <span>💻</span><span>دليل تعديل الكود في برنامج VS Code (خطوة بخطوة للمبتدئين)</span>
+            </h2>
+            <p class="text-xs text-pink-300 mt-0.5">تقدر تنسخ الكود الجديد كله بضغطة واحدة، أو تمشي على خطوات (ابحث عن ⬅️ احذف ⬅️ ضيف مكانه) بالضبط زي ما طلبت!</p>
+          </div>
+          <button id="btn-close-vscode" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold">✕</button>
+        </div>
+
+        <!-- One-Click Full Copy Banner -->
+        <div class="bg-gradient-to-r from-emerald-950/90 via-slate-900 to-pink-950/80 border border-emerald-400/50 rounded-xl p-3.5 mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="text-sm font-black text-emerald-300">⚡ الطريقة الأسرع (في ثانية واحدة بدون تعب):</div>
+            <div class="text-xs text-slate-300">اضغط الزر الأخضر لنسخ الكود الجديد بالكامل، ثم افتح ملفك في VS Code واضغط <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-white">Ctrl + A</span> ثم <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-white">Delete</span> ثم <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-white">Ctrl + V</span> واحفظ الملف <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-white">Ctrl + S</span>.</div>
+          </div>
+          <button id="btn-copy-full-html" class="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg transition shrink-0">
+            📋 نسخ الكود الكامل المعدل لـ VS Code
+          </button>
+        </div>
+
+        <!-- Step-by-Step Find & Replace Cards -->
+        <div class="space-y-3 overflow-y-auto custom-scroll pr-1 text-xs">
+          <div class="bg-slate-900/90 border border-slate-700 rounded-xl p-3.5">
+            <div class="font-black text-pink-400 text-sm mb-1">الخطوة 1️⃣: إصلاح الماوس المفصول وتفعيل الدوران الحر 360° والتصويب (كليك يمين + كليك يسار)</div>
+            <p class="text-slate-300 mb-2">في برنامج VS Code اضغط <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">Ctrl + F</span> وابحث عن السطر ده:</p>
+            <pre class="bg-rose-950/50 border border-rose-500/40 rounded-lg p-2 text-rose-200 mono overflow-x-auto mb-2">canvas.addEventListener('mousedown', (e) => {</pre>
+            <p class="text-slate-300 mb-2">🗑️ <b>احذف</b> من أول السطر ده لحد آخر دالة <span class="mono text-rose-300">window.addEventListener('mouseup', ... });</span> وضيف مكانه الكود ده (بيفعل Pointer Lock عشان الماوس يلف الكاميرا بمجرد تحريكه بدون تعليق، وكليك يمين يعمل زووم تصويب GTA، وكليك يسار يضرب نار أوتوماتيك):</p>
+            <pre id="code-step-1" class="bg-emerald-950/40 border border-emerald-500/40 rounded-lg p-2 text-emerald-200 mono overflow-x-auto text-[11px] leading-relaxed">canvas.addEventListener('click', () => {
+  if (document.pointerLockElement !== canvas && canvas.requestPointerLock) {
+    try { canvas.requestPointerLock(); } catch (err) {}
+  }
+});
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('mousedown', (e) => {
+  soundEngine.init();
+  if (e.button === 0) { state.isFiring = true; firePrimaryWeapon(); }
+  if (e.button === 2) { state.isAiming = true; }
+  state.isDragging = true;
+  state.lastMouseX = e.clientX;
+  state.lastMouseY = e.clientY;
+});
+window.addEventListener('mousemove', (e) => {
+  const locked = document.pointerLockElement === canvas;
+  if (!locked && !state.isDragging) return;
+  const dx = locked ? e.movementX : (e.clientX - state.lastMouseX);
+  const dy = locked ? e.movementY : (e.clientY - state.lastMouseY);
+  state.lastMouseX = e.clientX;
+  state.lastMouseY = e.clientY;
+  const sens = state.isAiming ? 0.0022 : 0.0038;
+  state.camYaw -= dx * sens;
+  state.camPitch = THREE.MathUtils.clamp(state.camPitch + dy * sens, -0.35, 1.32);
+  state.camFollowTimer = 1.8;
+});
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 0) state.isFiring = false;
+  if (e.button === 2) state.isAiming = false;
+  state.isDragging = false;
+});</pre>
+          </div>
+
+          <div class="bg-slate-900/90 border border-slate-700 rounded-xl p-3.5">
+            <div class="font-black text-amber-400 text-sm mb-1">الخطوة 2️⃣: تحويل الألوان والإضاءة لـ GTA VI (Vice Sunset + ToneMapping واقعي)</div>
+            <p class="text-slate-300 mb-2">اضغط <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">Ctrl + F</span> وابحث عن:</p>
+            <pre class="bg-rose-950/50 border border-rose-500/40 rounded-lg p-2 text-rose-200 mono overflow-x-auto mb-2">renderer.shadowMap.type = THREE.PCFSoftShadowMap;</pre>
+            <p class="text-slate-300 mb-2">✨ <b>احذف</b> الـ 5 سطور اللي تحتها (الخاصة بـ <span class="mono text-rose-300">scene.background</span> و <span class="mono text-rose-300">scene.fog</span>) وضيف مكانهم إعدادات معالجة الألوان السينمائية ACES Filmic:</p>
+            <pre class="bg-emerald-950/40 border border-emerald-500/40 rounded-lg p-2 text-emerald-200 mono overflow-x-auto text-[11px] leading-relaxed">renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.18;
+renderer.outputEncoding = THREE.sRGBEncoding;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x2e1a47);
+scene.fog = new THREE.FogExp2(0xd97757, 0.00058);</pre>
+          </div>
+
+          <div class="bg-slate-900/90 border border-slate-700 rounded-xl p-3.5">
+            <div class="font-black text-sky-400 text-sm mb-1">الخطوة 3️⃣: إصلاح الكاميرا عشان متفصلش لما تركب العربية أو الطيارة</div>
+            <p class="text-slate-300 mb-2">اضغط <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">Ctrl + F</span> وابحث داخل دالة <span class="mono text-sky-300">updateCamera(dt)</span> عن السطر ده:</p>
+            <pre class="bg-rose-950/50 border border-rose-500/40 rounded-lg p-2 text-rose-200 mono overflow-x-auto mb-2">const chaseYaw = state.isDragging ? state.camYaw : (v.yaw + Math.PI);</pre>
+            <p class="text-slate-300 mb-2">🗑️ <b>احذفه</b> هو والسطر اللي تحته، وضيف مكانه الكود ده (بيخلي الماوس يلف حوالين العربية أو الطيارة بحرية تامة، ولما تسيب الماوس يرجع بنعومة وراها زي GTA):</p>
+            <pre class="bg-emerald-950/40 border border-emerald-500/40 rounded-lg p-2 text-emerald-200 mono overflow-x-auto text-[11px] leading-relaxed">if (state.camFollowTimer > 0) {
+  state.camFollowTimer -= dt;
+} else if (Math.abs(v.speed) > 8) {
+  state.camYaw = lerpAngle(state.camYaw, v.yaw + Math.PI, dt * 3.2);
+}
+const chaseYaw = state.camYaw;</pre>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Modal: Keyboard & GTA Flight Controls Guide -->
-    <div id="modal-controls" class="hidden fixed inset-0 z-30 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4">
-      <div class="glass-panel rounded-2xl max-w-xl w-full p-5 border border-sky-400/30">
+    <!-- Modal: Keyboard & GTA VI Mouse Controls Guide -->
+    <div id="modal-controls" class="hidden fixed inset-0 z-30 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="glass-panel rounded-2xl max-w-xl w-full p-5 border border-pink-400/30">
         <div class="flex items-center justify-between border-b border-slate-700 pb-3 mb-4">
-          <h2 class="text-lg font-black text-white">⌨️ دليل التحكم الكامل (طيران GTA + الأسلحة والقتال)</h2>
+          <h2 class="text-lg font-black text-white">⌨️ دليل تحكم GTA VI الجديد (الماوس + الدريفت + الطيران)</h2>
           <button id="btn-close-controls" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold">✕</button>
         </div>
 
         <div class="space-y-3 text-xs">
           <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-            <div class="font-bold text-emerald-400 mb-1.5">🚶 المشي والأسلحة الشخصية:</div>
+            <div class="font-bold text-pink-400 mb-1.5">🖱️ تحكم الماوس والمشي والتصويب (TPS):</div>
             <div class="grid grid-cols-2 gap-1.5 text-slate-200">
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">W A S D</span>: التحرك والمشي</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">Shift / Space</span>: الجري / القفز</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">1 / 2 / 3 / 4</span>: تبديل السلاح (M4، قناصة، RPG، ليزر)</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">Z</span> أو <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">كليك يسار</span>: إطلاق النار</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">M</span>: إطلاق صاروخ موجه / قذيفة</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">F</span> أو <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">E</span>: ركوب / نزول من الطائرة أو السيارة</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-pink-300">حركة الماوس</span>: دوران كاميرا حر 360°</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-pink-300">كليك يمين</span>: زووم تصويب الكتف (GTA Aim)</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">كليك يسار (مستمر)</span>: إطلاق نار رشاش</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">W A S D + Shift</span>: المشي والجري السريع</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">عجلة الماوس / 1-4</span>: تبديل السلاح الفوري</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">F أو E</span>: ركوب / نزول من السيارة أو الطائرة</div>
             </div>
           </div>
 
           <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-            <div class="font-bold text-sky-400 mb-1.5">✈️ نظام طيران GTA السلس + القتال الجوي:</div>
+            <div class="font-bold text-sky-400 mb-1.5">🏎️ قيادة السيارات والدريفت + ✈️ الطيران:</div>
             <div class="grid grid-cols-2 gap-1.5 text-slate-200">
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">W / S</span>: زيادة السرعة والإقلاع / تهدئة المحرك</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">A / D</span>: انعطاف سلس يميناً ويساراً (أرضاً وجواً)</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">سهم لأسفل / لأعلى</span>: رفع أنف الطائرة للصعود / الهبوط (مع توازن تلقائي)</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">سهم يمين / يسار</span>: ميلان الأجنحة (Roll) مع اعتدال تلقائي</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">Z</span> و <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">M</span>: رشاش الطائرة / إطلاق صاروخ موجه لتدمير الأهداف</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">X</span>: شعلات حرارية لتضليل صواريخ الدفاع الجوي (SAM)</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-pink-300">Space (في السيارة)</span>: فرامل يد ودريفت احترافي</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">Shift (في السيارة/الطائرة)</span>: نيترو / حارق لاحق</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">W / S + A / D</span>: تسارع وانعطاف سلس</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">الأسهم أو الماوس</span>: توجيه الطائرة والميلان</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">M</span>: إطلاق صاروخ موجه ذكي</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">X</span>: إطلاق شعلات حرارية مضادة للصواريخ</div>
             </div>
           </div>
         </div>
@@ -383,147 +533,151 @@
 
   <script>
     // =========================================================================
-    // AEROCITY 3D v2.0 — GTA FLIGHT, WEAPONS, STYLIZED CHARACTERS & SAM DEFENSE
+    // AEROCITY VI: VICE EDITION — FULL MOUSE LOCK, GTA VI VISUALS & PHYSICS
     // =========================================================================
 
+    function lerpAngle(a, b, t) {
+      const diff = THREE.MathUtils.euclideanModulo(b - a + Math.PI, Math.PI * 2) - Math.PI;
+      return a + diff * Math.min(1, t);
+    }
+
     const WEAPON_CATALOG = [
-      { id: 1, name: 'رشاش هجومي M4', fireRate: 0.11, speed: 195, color: 0xfef08a, explosive: false, damage: 25 },
-      { id: 2, name: 'قناصة تكتيكية AWP', fireRate: 0.45, speed: 320, color: 0x38bdf8, explosive: false, damage: 85 },
-      { id: 3, name: 'قاذف صواريخ RPG-7', fireRate: 0.75, speed: 115, color: 0xf97316, explosive: true, damage: 150 },
-      { id: 4, name: 'مدفع بلازما خارق', fireRate: 0.18, speed: 240, color: 0xa855f7, explosive: true, damage: 95 }
+      { id: 1, name: 'رشاش هجومي M4A1', fireRate: 0.095, speed: 240, color: 0xfef08a, explosive: false, damage: 28 },
+      { id: 2, name: 'قناصة ثقيلة AWP', fireRate: 0.42, speed: 380, color: 0x38bdf8, explosive: false, damage: 95 },
+      { id: 3, name: 'قاذف صواريخ RPG-7', fireRate: 0.68, speed: 135, color: 0xf97316, explosive: true, damage: 180 },
+      { id: 4, name: 'مدفع نيون فايس الخارق', fireRate: 0.14, speed: 290, color: 0xf472b6, explosive: true, damage: 110 }
     ];
 
-    // Stylized Character Archetypes for Varied, Natural & Cartoon/Stylized Bots
     const CHARACTER_ARCHETYPES = [
-      { role: 'طيار مقاتل', skin: 0xf1c27d, shirt: 0x365314, pants: 0x1a2e05, hair: 0x1e293b, hat: 'helmet', glasses: true },
-      { role: 'ضابط شرطة', skin: 0xe0ac69, shirt: 0x1e3a8a, pants: 0x0f172a, hair: 0x27272a, hat: 'police', glasses: true },
-      { role: 'جندي كوماندوز', skin: 0xc68642, shirt: 0x3f6212, pants: 0x27272a, hair: 0x18181b, hat: 'beret', glasses: false },
-      { role: 'شاب كاجوال', skin: 0xffdbac, shirt: 0xef4444, pants: 0x1e40af, hair: 0x78350f, hat: 'cap', glasses: false },
+      { role: 'بطل فايس سيتي', skin: 0xf1c27d, shirt: 0xec4899, pants: 0x1e293b, hair: 0x111827, hat: 'none', glasses: true },
+      { role: 'ضابط شرطة ليونيدا', skin: 0xe0ac69, shirt: 0x1e3a8a, pants: 0x0f172a, hair: 0x27272a, hat: 'police', glasses: true },
+      { role: 'جندي كوماندوز', skin: 0xc68642, shirt: 0x3f6212, pants: 0x18181b, hair: 0x18181b, hat: 'helmet', glasses: false },
+      { role: 'نجم شاطئ ميامي', skin: 0xffdbac, shirt: 0x06b6d4, pants: 0xf8fafc, hair: 0x78350f, hat: 'cap', glasses: true },
       { role: 'رجل أعمال', skin: 0xf1c27d, shirt: 0x1e293b, pants: 0x090d16, hair: 0x451a03, hat: 'none', glasses: true },
-      { role: 'مهندس مطار', skin: 0xe0ac69, shirt: 0xeab308, pants: 0x1e293b, hair: 0x111827, hat: 'cap', glasses: false },
-      { role: 'مغامر كرتوني', skin: 0xffdbac, shirt: 0x8b5cf6, pants: 0x312e81, hair: 0xf59e0b, hat: 'afro', glasses: true }
+      { role: 'مهندس طيران', skin: 0xe0ac69, shirt: 0xf59e0b, pants: 0x1e293b, hair: 0x111827, hat: 'cap', glasses: false },
+      { role: 'مغامر نيون', skin: 0xffdbac, shirt: 0x8b5cf6, pants: 0x312e81, hair: 0xf59e0b, hat: 'afro', glasses: true }
     ];
 
     const FLEET_CATALOG = [
       {
-        id: 'cessna',
-        name: 'سيسنا سكاي هوك 172',
-        subtitle: 'طائرة تدريب وجولات جوية مروحية (تحكم GTA سلس)',
-        category: 'aircraft',
-        type: 'propeller',
-        maxSpeed: 260,
-        takeoffSpeed: 70,
-        accel: 55,
-        turnRate: 1.8,
-        pitchRate: 1.5,
-        color: 0x38bdf8,
-        accent: 0xf8fafc,
-        desc: 'توازن تلقائي للأجنحة وإقلاع سريع ومزودة برشاش أمامي.'
+        id: 'sportscar',
+        name: 'سيارة Vice GT الخارقة (نيترو + دريفت)',
+        subtitle: 'سيارة رياضية بدفع خلفي ودريفت [Space] ونيترو [Shift]',
+        category: 'car',
+        type: 'car',
+        maxSpeed: 265,
+        takeoffSpeed: 9999,
+        accel: 95,
+        turnRate: 2.65,
+        pitchRate: 0,
+        color: 0xf43f5e,
+        accent: 0x0f172a,
+        desc: 'فيزياء تعليق وميلان واقعي مع دريفت احترافي ودخان إطارات كثيف.'
+      },
+      {
+        id: 'policecar',
+        name: 'سيارة شرطة VCPD التكتيكية',
+        subtitle: 'مركبة مطاردة سريعة بسارينة نيون مزدوجة',
+        category: 'car',
+        type: 'car',
+        maxSpeed: 245,
+        takeoffSpeed: 9999,
+        accel: 88,
+        turnRate: 2.55,
+        pitchRate: 0,
+        color: 0x0f172a,
+        accent: 0x38bdf8,
+        desc: 'مجهزة بسارينة طوارئ تفاعلية ومدفع أمامي للمطاردات.'
       },
       {
         id: 'f22',
-        name: 'إف-22 رابتور (F-22 Raptor)',
-        subtitle: 'مقاتلة سيادة جوية + صواريخ موجهة + شعلات',
+        name: 'مقاتلة الشبح F-22 Raptor',
+        subtitle: 'سيادة جوية + حارق لاحق + صواريخ موجهة',
         category: 'aircraft',
         type: 'jet',
-        maxSpeed: 680,
-        takeoffSpeed: 105,
-        accel: 115,
-        turnRate: 2.35,
-        pitchRate: 2.0,
-        color: 0x475569,
-        accent: 0x0ea5e9,
-        desc: 'مقاتلة نفاثة مسلحة بمدفع رشاش وصواريخ جو-جو وجو-أرض لتدمير الدفاعات الجوية.'
-      },
-      {
-        id: 'b747',
-        name: 'بوينج 747 الجامبو (Boeing 747)',
-        subtitle: 'طائرة ركاب تجارية عملاقة بـ 4 محركات',
-        category: 'aircraft',
-        type: 'airliner',
-        maxSpeed: 460,
-        takeoffSpeed: 120,
-        accel: 65,
-        turnRate: 1.25,
-        pitchRate: 1.15,
-        color: 0xf8fafc,
-        accent: 0x2563eb,
-        desc: 'طائرة ركاب عملاقة بطابقين مع استقرار تلقائي سلس في الجو.'
+        maxSpeed: 720,
+        takeoffSpeed: 95,
+        accel: 135,
+        turnRate: 2.45,
+        pitchRate: 2.1,
+        color: 0x334155,
+        accent: 0x38bdf8,
+        desc: 'مقاتلة نفاثة فائقة السرعة مع خطوط تكثيف هوائي على أطراف الأجنحة.'
       },
       {
         id: 'apache',
         name: 'مروحية أباتشي الهجومية (AH-64)',
-        subtitle: 'مروحية قتالية مسلحة بصواريخ ومدفع رشاش',
+        subtitle: 'إقلاع عمودي وتحكم GTA سلس + صواريخ هيلفاير',
         category: 'aircraft',
         type: 'helicopter',
-        maxSpeed: 295,
+        maxSpeed: 310,
         takeoffSpeed: 0,
-        accel: 70,
-        turnRate: 2.2,
-        pitchRate: 1.5,
-        color: 0x10b981,
+        accel: 80,
+        turnRate: 2.4,
+        pitchRate: 1.6,
+        color: 0x059669,
         accent: 0x064e3b,
-        desc: 'إقلاع عمودي سلس وتحكم GTA مريح مع صواريخ هيلفاير لتدمير بطاريات SAM.'
+        desc: 'حوم فوق أبراج فايس سيتي ودمر الأهداف بالرشاش والصواريخ الموجهة.'
+      },
+      {
+        id: 'cessna',
+        name: 'سيسنا سكاي هوك 172',
+        subtitle: 'طائرة جولات ساحلية فوق شاطئ النخيل',
+        category: 'aircraft',
+        type: 'propeller',
+        maxSpeed: 280,
+        takeoffSpeed: 65,
+        accel: 65,
+        turnRate: 1.95,
+        pitchRate: 1.6,
+        color: 0x38bdf8,
+        accent: 0xf8fafc,
+        desc: 'توازن تلقائي سلس جداً للإقلاع والهبوط والاستمتاع بغروب الشمس.'
       },
       {
         id: 'stunt',
-        name: 'طائرة استعراض بهلوانية (Biplane)',
-        subtitle: 'طائرة بجناحين مزدوجين ودخان ملون ورشاش',
+        name: 'طائرة الاستعراض البهلوانية (Vice Stunt)',
+        subtitle: 'رشاقة قصوى للمناورة بين ناطحات السحاب',
         category: 'aircraft',
         type: 'stunt',
-        maxSpeed: 340,
-        takeoffSpeed: 65,
-        accel: 75,
-        turnRate: 2.6,
-        pitchRate: 2.3,
-        color: 0xef4444,
+        maxSpeed: 360,
+        takeoffSpeed: 60,
+        accel: 85,
+        turnRate: 2.8,
+        pitchRate: 2.4,
+        color: 0xec4899,
         accent: 0xfacc15,
-        desc: 'رشيقة جداً للمناورات بين ناطحات السحاب وتفادي الصواريخ.'
+        desc: 'مزودة بدخان استعراض ملون ورشاش مزدوج.'
       },
       {
         id: 'vtol',
-        name: 'أوسبري الهجينة (V-22 Tiltrotor)',
-        subtitle: 'طائرة عسكرية بمراوح مزدوجة قابلة للإمالة',
+        name: 'أوسبري العسكرية الهجينة (V-22)',
+        subtitle: 'طائرة بمراوح مزدوجة وإقلاع قصير',
         category: 'aircraft',
         type: 'vtol',
-        maxSpeed: 420,
-        takeoffSpeed: 55,
-        accel: 82,
-        turnRate: 1.95,
-        pitchRate: 1.65,
+        maxSpeed: 440,
+        takeoffSpeed: 50,
+        accel: 90,
+        turnRate: 2.05,
+        pitchRate: 1.75,
         color: 0x6366f1,
         accent: 0xe2e8f0,
-        desc: 'تجمع بين الإقلاع السريع والقوة النارية العالية.'
+        desc: 'تجمع بين سرعة المقاتلات ومرونة الهليكوبتر.'
       },
       {
-        id: 'sportscar',
-        name: 'سيارة سوبر سبورت GT مسلحة',
-        subtitle: 'سيارة رياضية سريعة للتجول والمطاردة في المدينة',
-        category: 'car',
-        type: 'car',
-        maxSpeed: 230,
-        takeoffSpeed: 9999,
-        accel: 75,
-        turnRate: 2.4,
-        pitchRate: 0,
-        color: 0xf43f5e,
-        accent: 0x1e293b,
-        desc: 'انطلق بها في شوارع المدينة وأطلق النار أثناء القيادة.'
-      },
-      {
-        id: 'policecar',
-        name: 'سيارة دورية الشرطة التكتيكية',
-        subtitle: 'مركبة أمن المطار والمدينة بأضواء طوارئ',
-        category: 'car',
-        type: 'car',
-        maxSpeed: 210,
-        takeoffSpeed: 9999,
-        accel: 68,
-        turnRate: 2.25,
-        pitchRate: 0,
-        color: 0x1e293b,
-        accent: 0x3b82f6,
-        desc: 'مزودة بسارينة ضوئية ومدفع أمامي للمطاردات.'
+        id: 'b747',
+        name: 'بوينج 747 الجامبو (Vice Airlines)',
+        subtitle: 'طائرة ركاب عملاقة بـ 4 محركات نفاثة',
+        category: 'aircraft',
+        type: 'airliner',
+        maxSpeed: 480,
+        takeoffSpeed: 115,
+        accel: 72,
+        turnRate: 1.35,
+        pitchRate: 1.2,
+        color: 0xf8fafc,
+        accent: 0xec4899,
+        desc: 'عملاق الأجواء بطابقين وإضاءة ملاحة ليلية.'
       }
     ];
 
@@ -532,27 +686,34 @@
       activeVehicle: null,
       nearestVehicle: null,
       cameraMode: 0,
-      timeOfDay: 0,
-      botBehavior: 0, // 0: Normal + Free Flight, 1: Airshow & Race, 2: Full Combat War Mode
+      timeOfDay: 1, // Start in GTA VI Golden/Pink Sunset!
+      botBehavior: 0,
       samActive: true,
       soundEnabled: true,
       smokeEnabled: false,
       currentWeaponIndex: 0,
       lastFireTime: 0,
       health: 100,
+      armor: 100,
+      cash: 25500,
       kills: 0,
+      wantedLevel: 0,
+      wantedDecayTimer: 0,
       keys: {},
       camYaw: -Math.PI * 0.5,
-      camPitch: 0.22,
-      camDistance: 14,
+      camPitch: 0.18,
+      camDistance: 13,
+      camFollowTimer: 0,
       isDragging: false,
-      mouseDownTime: 0,
+      isFiring: false,
+      isAiming: false,
+      pointerLocked: false,
       lastMouseX: 0,
       lastMouseY: 0,
       player: {
         mesh: null,
         weaponMesh: null,
-        pos: new THREE.Vector3(210, 0, 85),
+        pos: new THREE.Vector3(205, 0, 74),
         vel: new THREE.Vector3(),
         yaw: -Math.PI * 0.5,
         walkCycle: 0,
@@ -569,7 +730,7 @@
     };
 
     // =========================================================================
-    // WEB AUDIO SYNTHESIZER (ENGINES, GUNSHOTS, MISSILES, EXPLOSIONS, SAM LOCK)
+    // WEB AUDIO SYNTHESIZER (ENGINES, TIRE SCREECH, GUNS, HITMARKER, EXPLOSIONS)
     // =========================================================================
     class SoundEngine {
       constructor() {
@@ -619,14 +780,14 @@
           const v = state.activeVehicle;
           const thr = Math.max(0.08, v.throttle);
           const spdRatio = Math.min(1, Math.abs(v.speed) / (v.spec.maxSpeed || 200));
-          let baseFreq = 65 + thr * 180 + spdRatio * 90;
-          if (v.spec.type === 'jet') baseFreq = 110 + thr * 320 + spdRatio * 180;
-          if (v.spec.type === 'helicopter') baseFreq = 32 + thr * 45;
-          if (v.spec.category === 'car') baseFreq = 50 + spdRatio * 170;
+          let baseFreq = 65 + thr * 180 + spdRatio * 95;
+          if (v.spec.type === 'jet') baseFreq = 115 + thr * 340 + spdRatio * 190;
+          if (v.spec.type === 'helicopter') baseFreq = 34 + thr * 48;
+          if (v.spec.category === 'car') baseFreq = 48 + spdRatio * 195 + (state.keys['ShiftLeft'] ? 45 : 0);
 
-          this.osc1.frequency.setTargetAtTime(baseFreq, this.ctx.currentTime, 0.05);
-          this.osc2.frequency.setTargetAtTime(baseFreq * 1.5, this.ctx.currentTime, 0.05);
-          this.gainNode.gain.setTargetAtTime(0.04 + thr * 0.055, this.ctx.currentTime, 0.08);
+          this.osc1.frequency.setTargetAtTime(baseFreq, this.ctx.currentTime, 0.04);
+          this.osc2.frequency.setTargetAtTime(baseFreq * 1.5, this.ctx.currentTime, 0.04);
+          this.gainNode.gain.setTargetAtTime(0.035 + thr * 0.055, this.ctx.currentTime, 0.07);
         } else {
           this.gainNode.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.08);
         }
@@ -650,31 +811,50 @@
         } catch (e) {}
       }
 
+      playHitmarker() {
+        this.playBeep(1350, 0.045, 'triangle', 0.09);
+      }
+
       playExplosion() {
-        this.playBeep(75, 0.38, 'sawtooth', 0.14);
-        setTimeout(() => this.playBeep(48, 0.35, 'triangle', 0.12), 50);
+        this.playBeep(72, 0.42, 'sawtooth', 0.16);
+        setTimeout(() => this.playBeep(44, 0.38, 'triangle', 0.14), 45);
       }
     }
 
     const soundEngine = new SoundEngine();
 
     // =========================================================================
-    // PROCEDURAL TEXTURES
+    // GTA VI PROCEDURAL TEXTURES (VICE NEON BUILDINGS, ASPHALT, SKY DOME)
     // =========================================================================
-    function createBuildingTexture(seedColor) {
+    function createBuildingTexture(seedColor, neonAccent) {
       const c = document.createElement('canvas');
       c.width = 256;
       c.height = 512;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = seedColor || '#1e293b';
+      ctx.fillStyle = seedColor || '#131c31';
       ctx.fillRect(0, 0, 256, 512);
-      for (let y = 12; y < 500; y += 22) {
-        for (let x = 12; x < 244; x += 28) {
-          const lit = Math.random() > 0.32;
-          ctx.fillStyle = lit ? (Math.random() > 0.25 ? '#bae6fd' : '#fde68a') : '#0f172a';
-          ctx.fillRect(x, y, 18, 13);
+
+      // Vertical architectural mullions
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      for (let x = 0; x < 256; x += 32) {
+        ctx.fillRect(x, 0, 4, 512);
+      }
+
+      for (let y = 14; y < 495; y += 20) {
+        for (let x = 10; x < 242; x += 28) {
+          const r = Math.random();
+          if (r > 0.35) {
+            ctx.fillStyle = r > 0.84 ? neonAccent : (r > 0.55 ? '#bae6fd' : '#fde68a');
+          } else {
+            ctx.fillStyle = '#090d16';
+          }
+          ctx.fillRect(x, y, 18, 12);
         }
       }
+      // Top Neon Strip
+      ctx.fillStyle = neonAccent || '#f472b6';
+      ctx.fillRect(0, 4, 256, 6);
+
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
@@ -686,9 +866,9 @@
       c.width = 256;
       c.height = 1024;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#1e242b';
+      ctx.fillStyle = '#181e29';
       ctx.fillRect(0, 0, 256, 1024);
-      ctx.fillStyle = '#e2e8f0';
+      ctx.fillStyle = '#f8fafc';
       ctx.fillRect(10, 0, 6, 1024);
       ctx.fillRect(240, 0, 6, 1024);
       for (let y = 20; y < 1000; y += 60) {
@@ -706,14 +886,15 @@
       c.width = 256;
       c.height = 256;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#262d38';
+      ctx.fillStyle = '#1c222d';
       ctx.fillRect(0, 0, 256, 256);
       ctx.fillStyle = '#facc15';
       for (let y = 10; y < 256; y += 42) {
         ctx.fillRect(125, y, 6, 24);
       }
-      ctx.fillStyle = '#cbd5e1';
+      ctx.fillStyle = '#f472b6';
       ctx.fillRect(8, 0, 4, 256);
+      ctx.fillStyle = '#38bdf8';
       ctx.fillRect(244, 0, 4, 256);
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = THREE.RepeatWrapping;
@@ -721,19 +902,82 @@
       return tex;
     }
 
+    function createSkyDomeTexture(mode = 1) {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+      const grad = ctx.createLinearGradient(0, 0, 0, 512);
+      if (mode === 0) {
+        // Sunny Miami Day
+        grad.addColorStop(0, '#0284c7');
+        grad.addColorStop(0.48, '#38bdf8');
+        grad.addColorStop(0.55, '#bae6fd');
+        grad.addColorStop(1, '#0284c7');
+      } else if (mode === 1) {
+        // GTA VI Vice City Sunset (Purple -> Pink -> Warm Coral -> Gold Horizon)
+        grad.addColorStop(0, '#0f0722');
+        grad.addColorStop(0.26, '#3b1d5e');
+        grad.addColorStop(0.42, '#be185d');
+        grad.addColorStop(0.50, '#fb923c');
+        grad.addColorStop(0.55, '#fde047');
+        grad.addColorStop(1, '#1e1b4b');
+      } else {
+        // Vice Neon Night
+        grad.addColorStop(0, '#02040a');
+        grad.addColorStop(0.45, '#090d1e');
+        grad.addColorStop(0.54, '#1e1b4b');
+        grad.addColorStop(1, '#02040a');
+      }
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 512, 512);
+      return new THREE.CanvasTexture(c);
+    }
+
     // =========================================================================
-    // UPGRADED STYLIZED / NATURAL CHARACTERS & WEAPON MESHES
+    // PALM TREES & VICE BEACH PROPS
+    // =========================================================================
+    function createPalmTreeMesh() {
+      const group = new THREE.Group();
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
+      const leafMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.55, side: THREE.DoubleSide });
+
+      const segments = 5;
+      for (let i = 0; i < segments; i++) {
+        const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.28 - i * 0.03, 0.34 - i * 0.03, 1.8, 7), trunkMat);
+        seg.position.set(i * 0.14, 0.9 + i * 1.65, 0);
+        seg.rotation.z = -i * 0.05;
+        seg.castShadow = true;
+        group.add(seg);
+      }
+
+      const crown = new THREE.Group();
+      crown.position.set(0.65, 8.6, 0);
+      for (let a = 0; a < 7; a++) {
+        const angle = (a / 7) * Math.PI * 2;
+        const frond = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.08, 0.65), leafMat);
+        frond.position.set(Math.cos(angle) * 1.4, -0.2, Math.sin(angle) * 1.4);
+        frond.rotation.y = -angle;
+        frond.rotation.z = -0.38;
+        crown.add(frond);
+      }
+      group.add(crown);
+      return group;
+    }
+
+    // =========================================================================
+    // CHARACTERS & WEAPON MESHES
     // =========================================================================
     function createGunMesh(weaponType = 1) {
       const gunGroup = new THREE.Group();
-      const metalMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8, roughness: 0.25 });
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.85, roughness: 0.22 });
       const accentMat = new THREE.MeshStandardMaterial({
-        color: weaponType === 3 ? 0x15803d : (weaponType === 4 ? 0x9333ea : 0x475569),
-        metalness: 0.5,
-        roughness: 0.4
+        color: weaponType === 3 ? 0x15803d : (weaponType === 4 ? 0xec4899 : 0x475569),
+        metalness: 0.6,
+        roughness: 0.3
       });
 
-      const barrelLen = weaponType === 2 ? 1.35 : (weaponType === 3 ? 1.25 : 0.95);
+      const barrelLen = weaponType === 2 ? 1.38 : (weaponType === 3 ? 1.28 : 0.95);
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, barrelLen), metalMat);
       body.position.set(0, 0, 0.35);
       gunGroup.add(body);
@@ -743,7 +987,6 @@
       gunGroup.add(stock);
 
       if (weaponType === 3) {
-        // RPG Warhead cone at front
         const warhead = new THREE.Mesh(
           new THREE.ConeGeometry(0.16, 0.42, 8),
           new THREE.MeshStandardMaterial({ color: 0xd97706 })
@@ -759,33 +1002,29 @@
       const group = new THREE.Group();
       const arch = archetypeInput || (isPlayer ? CHARACTER_ARCHETYPES[0] : CHARACTER_ARCHETYPES[Math.floor(Math.random() * CHARACTER_ARCHETYPES.length)]);
 
-      const skinMat = new THREE.MeshStandardMaterial({ color: arch.skin, roughness: 0.5 });
-      const shirtMat = new THREE.MeshStandardMaterial({ color: isPlayer ? 0x0284c7 : arch.shirt, roughness: 0.45 });
-      const pantsMat = new THREE.MeshStandardMaterial({ color: arch.pants, roughness: 0.65 });
-      const darkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3, metalness: 0.6 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: arch.skin, roughness: 0.45 });
+      const shirtMat = new THREE.MeshStandardMaterial({ color: isPlayer ? 0xec4899 : arch.shirt, roughness: 0.4 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: arch.pants, roughness: 0.6 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.25, metalness: 0.7 });
       const hairMat = new THREE.MeshStandardMaterial({ color: arch.hair, roughness: 0.7 });
-      const shoeMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5 });
+      const shoeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
       const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-      // Rounded Torso & Jacket Collar
       const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.31, 1.02, 12), shirtMat);
       torso.position.y = 1.46;
       torso.scale.set(1.15, 1, 0.78);
       torso.castShadow = true;
       group.add(torso);
 
-      // Belt & Tactical Vest Detail
       const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 12), darkMat);
       belt.position.y = 0.98;
       belt.scale.set(1.16, 1, 0.8);
       group.add(belt);
 
-      // Neck
       const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.22, 10), skinMat);
       neck.position.y = 2.04;
       group.add(neck);
 
-      // Smooth Stylized Spherical Head
       const headGroup = new THREE.Group();
       headGroup.position.y = 2.34;
       const head = new THREE.Mesh(new THREE.SphereGeometry(0.31, 16, 16), skinMat);
@@ -793,7 +1032,6 @@
       head.castShadow = true;
       headGroup.add(head);
 
-      // Facial Features: Eyes, Pupils, Smile/Mouth
       [-0.1, 0.1].forEach(ex => {
         const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.048, 8, 8), whiteMat);
         eyeWhite.position.set(ex, 0.04, 0.26);
@@ -802,25 +1040,23 @@
         headGroup.add(eyeWhite, pupil);
       });
 
-      // Sunglasses or Pilot Visor
       if (arch.glasses || isPlayer) {
-        const glasses = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.1), darkMat);
+        const glasses = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.12, 0.1), darkMat);
         glasses.position.set(0, 0.05, 0.27);
         headGroup.add(glasses);
       }
 
-      // Hats / Hairstyles for distinct personality
-      if (arch.hat === 'helmet' || isPlayer) {
+      if (arch.hat === 'helmet') {
         const helmet = new THREE.Mesh(
           new THREE.SphereGeometry(0.34, 14, 14, 0, Math.PI * 2, 0, Math.PI * 0.65),
-          new THREE.MeshStandardMaterial({ color: isPlayer ? 0x0ea5e9 : 0x3f6212, metalness: 0.5, roughness: 0.3 })
+          new THREE.MeshStandardMaterial({ color: 0x3f6212, metalness: 0.5, roughness: 0.3 })
         );
         helmet.position.y = 0.03;
         headGroup.add(helmet);
       } else if (arch.hat === 'cap' || arch.hat === 'police') {
         const capCrown = new THREE.Mesh(
           new THREE.SphereGeometry(0.32, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
-          new THREE.MeshStandardMaterial({ color: arch.hat === 'police' ? 0x1e3a8a : 0xef4444 })
+          new THREE.MeshStandardMaterial({ color: arch.hat === 'police' ? 0x1e3a8a : 0x06b6d4 })
         );
         capCrown.position.y = 0.05;
         const visor = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.04, 0.26), darkMat);
@@ -831,14 +1067,13 @@
         afro.position.set(0, 0.14, -0.04);
         headGroup.add(afro);
       } else {
-        const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
+        const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.325, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
         hairTop.position.y = 0.05;
         headGroup.add(hairTop);
       }
 
       group.add(headGroup);
 
-      // Articulated Limbs with Rounded Joints, Hands & Shoes
       function makeLeg(xOffset) {
         const legPivot = new THREE.Group();
         legPivot.position.set(xOffset, 0.95, 0);
@@ -854,7 +1089,7 @@
       function makeArm(xOffset, withWeapon = false) {
         const armPivot = new THREE.Group();
         armPivot.position.set(xOffset, 1.85, 0);
-        const armCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.72, 10), shirtMat);
+        const armCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.72, 10), skinMat);
         armCyl.position.y = -0.34;
         armCyl.castShadow = true;
         const hand = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), skinMat);
@@ -865,7 +1100,7 @@
           const wpn = createGunMesh(1);
           wpn.position.set(0, -0.7, 0.2);
           armPivot.add(wpn);
-          armPivot.rotation.x = -0.55; // Hold weapon ready forward
+          armPivot.rotation.x = -0.55;
           group.userData.weaponSocket = hand;
           group.userData.weaponMesh = wpn;
         }
@@ -875,7 +1110,7 @@
       const leftLeg = makeLeg(-0.19);
       const rightLeg = makeLeg(0.19);
       const leftArm = makeArm(-0.48, false);
-      const rightArm = makeArm(0.48, isPlayer || arch.role === 'جندي كوماندوز' || arch.role === 'ضابط شرطة');
+      const rightArm = makeArm(0.48, isPlayer || arch.role.includes('شرطة') || arch.role.includes('كوماندوز'));
 
       group.add(leftLeg, rightLeg, leftArm, rightArm);
       group.userData.limbs = { leftLeg, rightLeg, leftArm, rightArm, headGroup };
@@ -893,24 +1128,21 @@
       const missileMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 });
       const tipMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
 
-      // Concrete Bunker Pedestal
       const bunker = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.8, 1.8, 10), baseMat);
       bunker.position.y = 0.9;
       bunker.castShadow = true;
       group.add(bunker);
 
-      // Rotating Turret Head
       const turret = new THREE.Group();
       turret.position.y = 2.2;
 
       const turretCore = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.6, 2.4), oliveMat);
       turret.add(turretCore);
 
-      // Quad SAM Missile Launcher Tubes
       [-1.4, 1.4].forEach(tx => {
         const pod = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.1, 3.6), oliveMat);
         pod.position.set(tx, 0.5, 0.2);
-        pod.rotation.x = -0.45; // Angled skyward
+        pod.rotation.x = -0.45;
         turret.add(pod);
 
         const nose = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.7, 8), tipMat);
@@ -919,7 +1151,6 @@
         turret.add(nose);
       });
 
-      // Tracking Radar Dish on top of SAM turret
       const dish = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 0.25), missileMat);
       dish.position.set(0, 1.5, -0.6);
       turret.add(dish);
@@ -930,14 +1161,14 @@
     }
 
     // =========================================================================
-    // 6 AIRCRAFT & 2 CARS 3D MODELS
+    // UPGRADED 3D AIRCRAFT & GTA VI SUPERCAR MODELS
     // =========================================================================
     function createAircraftMesh(spec) {
       const root = new THREE.Group();
-      const bodyMat = new THREE.MeshStandardMaterial({ color: spec.color, metalness: 0.45, roughness: 0.35 });
-      const accentMat = new THREE.MeshStandardMaterial({ color: spec.accent, metalness: 0.3, roughness: 0.4 });
-      const glassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.85, roughness: 0.15, transparent: true, opacity: 0.72 });
-      const darkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7 });
+      const bodyMat = new THREE.MeshStandardMaterial({ color: spec.color, metalness: 0.55, roughness: 0.28 });
+      const accentMat = new THREE.MeshStandardMaterial({ color: spec.accent, metalness: 0.4, roughness: 0.32 });
+      const glassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.9, roughness: 0.1, transparent: true, opacity: 0.75 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6 });
       const flameMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
 
       const rotors = [];
@@ -945,24 +1176,23 @@
       const gearGroup = new THREE.Group();
 
       if (spec.type === 'jet') {
-        const fuselage = new THREE.Mesh(new THREE.ConeGeometry(1.15, 11.5, 6), bodyMat);
+        const fuselage = new THREE.Mesh(new THREE.ConeGeometry(1.2, 12.0, 6), bodyMat);
         fuselage.rotation.x = Math.PI * 0.5;
-        fuselage.scale.set(1.2, 1, 0.48);
+        fuselage.scale.set(1.25, 1, 0.46);
         fuselage.position.y = 1.6;
         fuselage.castShadow = true;
         root.add(fuselage);
 
-        const canopy = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.65, 3.2), glassMat);
-        canopy.position.set(0, 2.05, 1.2);
+        const canopy = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.65, 3.3), glassMat);
+        canopy.position.set(0, 2.05, 1.25);
         root.add(canopy);
 
-        const mainWing = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.14, 3.8), bodyMat);
+        const mainWing = new THREE.Mesh(new THREE.BoxGeometry(9.8, 0.14, 3.9), bodyMat);
         mainWing.position.set(0, 1.55, -0.6);
         mainWing.castShadow = true;
         root.add(mainWing);
 
-        // Under-wing Missiles
-        [-3.2, 3.2].forEach(mx => {
+        [-3.3, 3.3].forEach(mx => {
           const msl = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.9, 8), new THREE.MeshBasicMaterial({ color: 0xf8fafc }));
           msl.rotation.x = Math.PI * 0.5;
           msl.position.set(mx, 1.35, -0.4);
@@ -970,9 +1200,9 @@
         });
 
         [-1.1, 1.1].forEach(xOffset => {
-          const fin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.8, 2.0), accentMat);
+          const fin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.85, 2.1), accentMat);
           fin.position.set(xOffset, 2.35, -4.1);
-          fin.rotation.z = xOffset > 0 ? -0.25 : 0.25;
+          fin.rotation.z = xOffset > 0 ? -0.26 : 0.26;
           root.add(fin);
 
           const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.44, 1.1, 12), darkMat);
@@ -980,9 +1210,9 @@
           nozzle.position.set(xOffset * 0.5, 1.55, -5.4);
           root.add(nozzle);
 
-          const burner = new THREE.Mesh(new THREE.ConeGeometry(0.34, 2.2, 12), flameMat);
+          const burner = new THREE.Mesh(new THREE.ConeGeometry(0.36, 2.5, 12), flameMat);
           burner.rotation.x = -Math.PI * 0.5;
-          burner.position.set(xOffset * 0.5, 1.55, -6.6);
+          burner.position.set(xOffset * 0.5, 1.55, -6.7);
           burner.visible = false;
           root.add(burner);
           afterburners.push(burner);
@@ -1039,7 +1269,6 @@
         noseGlass.scale.set(0.85, 0.85, 1.3);
         root.add(noseGlass);
 
-        // Stub Wings with Rocket Pods
         const stubWing = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.18, 0.9), accentMat);
         stubWing.position.set(0, 1.55, 0.6);
         root.add(stubWing);
@@ -1065,13 +1294,13 @@
           new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.06, 9.8), darkMat)
         );
         root.add(mainRotorGroup);
-        rotors.push({ mesh: mainRotorGroup, axis: 'y', speed: 24 });
+        rotors.push({ mesh: mainRotorGroup, axis: 'y', speed: 26 });
 
         const tailRotorGroup = new THREE.Group();
         tailRotorGroup.position.set(0.22, 2.6, -6.2);
         tailRotorGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.8, 0.22), accentMat));
         root.add(tailRotorGroup);
-        rotors.push({ mesh: tailRotorGroup, axis: 'x', speed: 30 });
+        rotors.push({ mesh: tailRotorGroup, axis: 'x', speed: 32 });
 
       } else if (spec.type === 'vtol') {
         const hull = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.7, 7.6), bodyMat);
@@ -1161,51 +1390,75 @@
 
     function createCarMesh(spec) {
       const root = new THREE.Group();
-      const bodyMat = new THREE.MeshStandardMaterial({ color: spec.color, metalness: 0.6, roughness: 0.25 });
-      const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.9, roughness: 0.1 });
-      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8 });
+      const bodyGroup = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: spec.color, metalness: 0.78, roughness: 0.16 });
+      const carbonMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.5, roughness: 0.35 });
+      const glassMat = new THREE.MeshStandardMaterial({ color: 0x090d16, metalness: 0.95, roughness: 0.08 });
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7 });
+      const rimMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.2 });
 
-      const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.72, 4.5), bodyMat);
-      chassis.position.y = 0.65;
+      // Sleek Lower Chassis + Aerodynamic Splitter
+      const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.18, 0.62, 4.7), bodyMat);
+      chassis.position.y = 0.58;
       chassis.castShadow = true;
-      root.add(chassis);
+      bodyGroup.add(chassis);
 
-      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.62, 2.2), glassMat);
-      cabin.position.set(0, 1.25, -0.2);
-      root.add(cabin);
+      const splitter = new THREE.Mesh(new THREE.BoxGeometry(2.24, 0.1, 4.82), carbonMat);
+      splitter.position.y = 0.28;
+      bodyGroup.add(splitter);
 
-      const hlMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
-      const tlMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
-      [-0.7, 0.7].forEach(lx => {
-        const hl = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.18, 0.1), hlMat);
-        hl.position.set(lx, 0.72, 2.26);
-        const tl = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.18, 0.1), tlMat);
-        tl.position.set(lx, 0.75, -2.26);
-        root.add(hl, tl);
+      // Fastback Cabin
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.56, 2.3), glassMat);
+      cabin.position.set(0, 1.12, -0.15);
+      bodyGroup.add(cabin);
+
+      // Rear GT Wing Spoiler
+      const spoilerWing = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.08, 0.42), carbonMat);
+      spoilerWing.position.set(0, 1.18, -2.15);
+      bodyGroup.add(spoilerWing);
+
+      // LED Headlights & Vice Neon Taillight Bar
+      const hlMat = new THREE.MeshBasicMaterial({ color: 0xe0f2fe });
+      const tlMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
+      [-0.74, 0.74].forEach(lx => {
+        const hl = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.12), hlMat);
+        hl.position.set(lx, 0.68, 2.34);
+        bodyGroup.add(hl);
       });
+      const tailBar = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.14, 0.1), tlMat);
+      tailBar.position.set(0, 0.74, -2.34);
+      bodyGroup.add(tailBar);
 
       if (spec.id === 'policecar') {
-        const sirenR = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.22), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
-        sirenR.position.set(-0.25, 1.62, -0.2);
-        const sirenB = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.22), new THREE.MeshBasicMaterial({ color: 0x3b82f6 }));
-        sirenB.position.set(0.25, 1.62, -0.2);
-        root.add(sirenR, sirenB);
+        const sirenR = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.15, 0.22), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+        sirenR.position.set(-0.26, 1.48, -0.15);
+        const sirenB = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.15, 0.22), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+        sirenB.position.set(0.26, 1.48, -0.15);
+        bodyGroup.add(sirenR, sirenB);
       }
 
-      const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.28, 12);
+      root.add(bodyGroup);
+
+      const wheelGeo = new THREE.CylinderGeometry(0.39, 0.39, 0.3, 14);
       wheelGeo.rotateZ(Math.PI * 0.5);
-      [[-1.05, 1.4], [1.05, 1.4], [-1.05, -1.4], [1.05, -1.4]].forEach(([wx, wz]) => {
-        const w = new THREE.Mesh(wheelGeo, wheelMat);
-        w.position.set(wx, 0.38, wz);
-        root.add(w);
+      const rimGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.32, 10);
+      rimGeo.rotateZ(Math.PI * 0.5);
+
+      const wheels = [];
+      [[-1.08, 1.45], [1.08, 1.45], [-1.08, -1.45], [1.08, -1.45]].forEach(([wx, wz]) => {
+        const wGroup = new THREE.Group();
+        wGroup.position.set(wx, 0.39, wz);
+        wGroup.add(new THREE.Mesh(wheelGeo, wheelMat), new THREE.Mesh(rimGeo, rimMat));
+        root.add(wGroup);
+        wheels.push(wGroup);
       });
 
-      root.userData = { rotors: [], afterburners: [], gearGroup: new THREE.Group() };
+      root.userData = { rotors: [], afterburners: [], gearGroup: new THREE.Group(), bodyGroup, wheels };
       return root;
     }
 
     // =========================================================================
-    // THREE.JS SCENE & WORLD GENERATION
+    // THREE.JS SCENE, GTA VI LIGHTING & VICE CITY WORLD GENERATION
     // =========================================================================
     const canvas = document.getElementById('webgl-canvas');
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -1213,22 +1466,39 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.18;
+    renderer.outputEncoding = THREE.sRGBEncoding;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x68a8e8);
-    scene.fog = new THREE.FogExp2(0x7ab5f0, 0.00072);
+    scene.background = new THREE.Color(0x2e1a47);
+    scene.fog = new THREE.FogExp2(0xd97757, 0.00058);
 
-    const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.2, 2600);
+    const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.2, 2800);
 
-    const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 0.78);
+    // Sky Dome
+    const skyDomeMat = new THREE.MeshBasicMaterial({ map: createSkyDomeTexture(1), side: THREE.BackSide, fog: false });
+    const skyDome = new THREE.Mesh(new THREE.SphereGeometry(2200, 32, 24), skyDomeMat);
+    scene.add(skyDome);
+
+    // Glowing GTA VI Sunset Sun Disc
+    const sunDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(140, 32),
+      new THREE.MeshBasicMaterial({ color: 0xfde047, fog: false })
+    );
+    sunDisc.position.set(-900, 260, -1100);
+    sunDisc.lookAt(0, 0, 0);
+    scene.add(sunDisc);
+
+    const hemiLight = new THREE.HemisphereLight(0xfbcfe8, 0x1e1b4b, 0.85);
     scene.add(hemiLight);
 
-    const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.25);
-    sunLight.position.set(220, 340, 180);
+    const sunLight = new THREE.DirectionalLight(0xfdba74, 1.35);
+    sunLight.position.set(220, 320, 180);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
-    const d = 320;
+    const d = 340;
     sunLight.shadow.camera.left = -d;
     sunLight.shadow.camera.right = d;
     sunLight.shadow.camera.top = d;
@@ -1236,28 +1506,38 @@
     scene.add(sunLight);
 
     const ocean = new THREE.Mesh(
-      new THREE.PlaneGeometry(4500, 4500),
-      new THREE.MeshStandardMaterial({ color: 0x0369a1, roughness: 0.25, metalness: 0.4 })
+      new THREE.PlaneGeometry(4800, 4800),
+      new THREE.MeshStandardMaterial({ color: 0x0369a1, roughness: 0.16, metalness: 0.65 })
     );
     ocean.rotation.x = -Math.PI * 0.5;
     ocean.position.y = -1.2;
     scene.add(ocean);
 
     const land = new THREE.Mesh(
-      new THREE.PlaneGeometry(1700, 1700),
-      new THREE.MeshStandardMaterial({ color: 0x2d4a3e, roughness: 0.9 })
+      new THREE.PlaneGeometry(1750, 1750),
+      new THREE.MeshStandardMaterial({ color: 0x1e3a2f, roughness: 0.88 })
     );
     land.rotation.x = -Math.PI * 0.5;
     land.receiveShadow = true;
     scene.add(land);
+
+    // Sandy Vice Beach Shoreline Strip
+    const beachStrip = new THREE.Mesh(
+      new THREE.PlaneGeometry(95, 920),
+      new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.85 })
+    );
+    beachStrip.rotation.x = -Math.PI * 0.5;
+    beachStrip.position.set(-365, 0.03, 0);
+    beachStrip.receiveShadow = true;
+    scene.add(beachStrip);
 
     let radarDish = null;
     let helipadTowerTop = new THREE.Vector3(-96, 74, -96);
 
     function buildOpenWorldCityAndAirport() {
       const roadTex = createRoadTexture();
-      const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.85 });
-      const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.8 });
+      const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.72, metalness: 0.15 });
+      const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.78 });
 
       const gridCoords = [-300, -180, -60, 60];
       gridCoords.forEach(coord => {
@@ -1274,14 +1554,32 @@
         scene.add(ewRoad);
       });
 
+      // Plant Palm Trees along Ocean Drive (-315) & City Boulevards
+      for (let pz = -320; pz <= 320; pz += 32) {
+        const palm1 = createPalmTreeMesh();
+        palm1.position.set(-318, 0, pz);
+        scene.add(palm1);
+
+        const palm2 = createPalmTreeMesh();
+        palm2.position.set(74, 0, pz);
+        palm2.rotation.y = Math.PI;
+        scene.add(palm2);
+      }
+
       const airportHighway = new THREE.Mesh(new THREE.PlaneGeometry(240, 20), roadMat);
       airportHighway.rotation.x = -Math.PI * 0.5;
       airportHighway.position.set(150, 0.07, 60);
       airportHighway.receiveShadow = true;
       scene.add(airportHighway);
 
-      const buildingPalettes = ['#1e293b', '#0f172a', '#1e3a5f', '#27272a', '#334155'];
-      const bTextures = buildingPalettes.map(c => createBuildingTexture(c));
+      const buildingPalettes = [
+        ['#131c31', '#f472b6'],
+        ['#0f172a', '#38bdf8'],
+        ['#1e1b4b', '#fb923c'],
+        ['#18181b', '#a855f7'],
+        ['#1e293b', '#2dd4bf']
+      ];
+      const bTextures = buildingPalettes.map(([c, n]) => createBuildingTexture(c, n));
 
       const blockCenters = [-240, -120, 0];
       blockCenters.forEach((bx, bi) => {
@@ -1296,12 +1594,12 @@
             const z = bz + oz;
             const w = 26 + (idx % 2) * 6;
             const d = 26 + ((idx + 1) % 2) * 6;
-            const h = (bi === 1 && bj === 1 && idx === 0) ? 74 : (22 + ((bi * 17 + bj * 31 + idx * 19) % 48));
+            const h = (bi === 1 && bj === 1 && idx === 0) ? 74 : (24 + ((bi * 17 + bj * 31 + idx * 19) % 52));
 
             const bMat = new THREE.MeshStandardMaterial({
               map: bTextures[(bi + bj + idx) % bTextures.length],
-              roughness: 0.4,
-              metalness: 0.35
+              roughness: 0.32,
+              metalness: 0.45
             });
             const bMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bMat);
             bMesh.position.set(x, h * 0.5, z);
@@ -1322,7 +1620,7 @@
 
               const hRing = new THREE.Mesh(
                 new THREE.RingGeometry(6.5, 7.5, 24),
-                new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide })
+                new THREE.MeshBasicMaterial({ color: 0xf472b6, side: THREE.DoubleSide })
               );
               hRing.rotation.x = -Math.PI * 0.5;
               hRing.position.set(x, h + 0.45, z);
@@ -1335,7 +1633,7 @@
       // Airport Apron & Runways
       const apron = new THREE.Mesh(
         new THREE.PlaneGeometry(310, 680),
-        new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85 })
+        new THREE.MeshStandardMaterial({ color: 0x262f40, roughness: 0.82 })
       );
       apron.rotation.x = -Math.PI * 0.5;
       apron.position.set(310, 0.04, 0);
@@ -1343,7 +1641,7 @@
       scene.add(apron);
 
       const rwyTex = createRunwayTexture();
-      const rwyMat = new THREE.MeshStandardMaterial({ map: rwyTex, roughness: 0.75 });
+      const rwyMat = new THREE.MeshStandardMaterial({ map: rwyTex, roughness: 0.72 });
 
       [330, 415].forEach(rx => {
         const rwy = new THREE.Mesh(new THREE.PlaneGeometry(38, 640), rwyMat);
@@ -1355,7 +1653,7 @@
         for (let rz = -300; rz <= 300; rz += 40) {
           const l1 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 6, 6), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
           l1.position.set(rx - 20, 0.4, rz);
-          const l2 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 6, 6), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+          const l2 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 6, 6), new THREE.MeshBasicMaterial({ color: 0xf472b6 }));
           l2.position.set(rx + 20, 0.4, rz);
           scene.add(l1, l2);
         }
@@ -1380,7 +1678,7 @@
 
       const towerCab = new THREE.Mesh(
         new THREE.CylinderGeometry(8.5, 6.2, 9, 12),
-        new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.8, roughness: 0.2 })
+        new THREE.MeshStandardMaterial({ color: 0xec4899, metalness: 0.8, roughness: 0.2 })
       );
       towerCab.position.set(195, 61, -110);
       scene.add(towerCab);
@@ -1416,12 +1714,14 @@
         spec,
         mesh,
         pos: mesh.position,
+        vel: new THREE.Vector3(),
         yaw,
         pitch: 0,
         roll: 0,
         speed: 0,
         throttle: 0,
         verticalSpeed: 0,
+        steerAngle: 0,
         gearDown: true
       };
       state.worldVehicles.push(vehicleObj);
@@ -1429,23 +1729,21 @@
     }
 
     function populateWorldVehiclesAndBots() {
-      // 1. Player Character with 3D Weapon in hand
       state.player.mesh = createHumanMesh(CHARACTER_ARCHETYPES[0], true);
       state.player.mesh.position.copy(state.player.pos);
       scene.add(state.player.mesh);
 
-      // 2. Spawn Parked Aircraft & Cars
       const spawns = [
+        { id: 'sportscar', x: 214, y: 0, z: 72, yaw: -Math.PI * 0.5 },
+        { id: 'policecar', x: 214, y: 0, z: 102, yaw: -Math.PI * 0.5 },
         { id: 'cessna', x: 255, y: 0, z: 95, yaw: 0 },
         { id: 'f22', x: 330, y: 0, z: 140, yaw: Math.PI },
         { id: 'b747', x: 415, y: 0, z: 180, yaw: Math.PI },
         { id: 'apache', x: 245, y: 0, z: 50, yaw: -Math.PI * 0.5 },
         { id: 'stunt', x: 255, y: 0, z: 5, yaw: 0 },
         { id: 'vtol', x: 255, y: 0, z: -40, yaw: 0 },
-        { id: 'sportscar', x: 215, y: 0, z: 68, yaw: -Math.PI * 0.5 },
-        { id: 'policecar', x: 215, y: 0, z: 105, yaw: -Math.PI * 0.5 },
         { id: 'apache', x: helipadTowerTop.x, y: helipadTowerTop.y, z: helipadTowerTop.z, yaw: 0 },
-        { id: 'sportscar', x: -60, y: 0, z: -30, yaw: 0 }
+        { id: 'sportscar', x: -305, y: 0, z: 25, yaw: 0 }
       ];
 
       spawns.forEach(s => {
@@ -1453,14 +1751,13 @@
         if (spec) createWorldVehicleInstance(spec, s.x, s.y, s.z, s.yaw);
       });
 
-      // 3. Spawn 6 Surface-to-Air Missile (SAM) Defense Batteries
       const samCoords = [
         { name: 'بطارية دفاع المطار الشمالي', x: 280, y: 0, z: -260 },
         { name: 'بطارية دفاع المطار الجنوبي', x: 280, y: 0, z: 260 },
         { name: 'بطارية دفاع الجسر الساحلي', x: 110, y: 0, z: -130 },
         { name: 'بطارية دفاع وسط المدينة', x: -180, y: 0, z: 120 },
         { name: 'بطارية القاعدة العسكرية', x: 235, y: 0, z: -150 },
-        { name: 'بطارية الميناء الغربي', x: -310, y: 0, z: -180 }
+        { name: 'بطارية شاطئ فايس الغربي', x: -310, y: 0, z: -180 }
       ];
 
       samCoords.forEach(sc => {
@@ -1477,10 +1774,9 @@
         });
       });
 
-      // 4. Spawn 8 AI Bot Aircraft
       const botPilotNames = [
         'كابتن طارق', 'طيار نادر', 'رائد سيف', 'كابتن ليلى',
-        'صقر الجو 1', 'كابتن كريم', 'ملازم رامي', 'نسر المدينة'
+        'صقر فايس 1', 'كابتن كريم', 'ملازم رامي', 'نسر ليونيدا'
       ];
       const planeIds = ['f22', 'cessna', 'b747', 'apache', 'stunt', 'vtol', 'f22', 'apache'];
 
@@ -1507,11 +1803,10 @@
         });
       });
 
-      // 5. Spawn 12 AI Traffic Cars
-      const carColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xec4899];
+      const carColors = [0xf43f5e, 0x38bdf8, 0x10b981, 0xf59e0b, 0xa855f7, 0xec4899];
       const avenues = [-300, -180, -60, 60];
       for (let i = 0; i < 12; i++) {
-        const baseSpec = { ...FLEET_CATALOG[6], color: carColors[i % carColors.length] };
+        const baseSpec = { ...FLEET_CATALOG[0], color: carColors[i % carColors.length] };
         const mesh = createCarMesh(baseSpec);
         const axis = i % 2 === 0 ? 'z' : 'x';
         const roadCoord = avenues[i % avenues.length];
@@ -1526,15 +1821,14 @@
           mesh.rotation.y = dir > 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
         }
         scene.add(mesh);
-        state.aiCars.push({ mesh, axis, roadCoord, dir, speed: 24 + (i % 4) * 5 });
+        state.aiCars.push({ mesh, axis, roadCoord, dir, speed: 26 + (i % 4) * 5 });
       }
 
-      // 6. Spawn 14 Varied Stylized Character Bots (Police, Soldiers, Pilots, Civilians)
       for (let i = 0; i < 14; i++) {
         const arch = CHARACTER_ARCHETYPES[i % CHARACTER_ARCHETYPES.length];
         const pedMesh = createHumanMesh(arch, false);
         const inAirport = i < 6;
-        const px = inAirport ? (206 + (i % 3) * 11) : (-170 + (i * 35) % 220);
+        const px = inAirport ? (206 + (i % 3) * 11) : (-290 + (i * 35) % 240);
         const pz = inAirport ? (42 + i * 13) : (-150 + (i * 45) % 260);
         pedMesh.position.set(px, 0, pz);
         scene.add(pedMesh);
@@ -1546,21 +1840,49 @@
           originZ: pz,
           yaw: Math.random() * Math.PI * 2,
           timer: Math.random() * 4,
-          walkPhase: Math.random() * 10,
-          fireCooldown: 2 + Math.random() * 3
+          walkPhase: Math.random() * 10
         });
       }
     }
 
     // =========================================================================
-    // WEAPONS, MISSILES, SAM INTERCEPTORS & EXPLOSIONS
+    // WANTED STARS, HITMARKER, WEAPONS, MISSILES & EXPLOSIONS
     // =========================================================================
+    function addKillAndWanted(bounty = 1500) {
+      state.kills++;
+      state.cash += bounty;
+      state.wantedLevel = Math.min(5, state.wantedLevel + 1);
+      state.wantedDecayTimer = 18;
+      updateWantedUI();
+
+      // Show Hitmarker
+      const hm = document.getElementById('hitmarker');
+      if (hm) {
+        hm.classList.remove('hidden');
+        soundEngine.playHitmarker();
+        clearTimeout(hm._timer);
+        hm._timer = setTimeout(() => hm.classList.add('hidden'), 160);
+      }
+    }
+
+    function updateWantedUI() {
+      const container = document.getElementById('wanted-stars');
+      if (!container) return;
+      container.innerHTML = '';
+      for (let i = 1; i <= 5; i++) {
+        const s = document.createElement('span');
+        s.textContent = '★';
+        s.className = i <= state.wantedLevel ? 'text-amber-400 wanted-active' : 'text-slate-700';
+        container.appendChild(s);
+      }
+      document.getElementById('hud-cash').textContent = state.cash.toLocaleString('en-US');
+    }
+
     function selectWeapon(index) {
-      state.currentWeaponIndex = THREE.MathUtils.clamp(index, 0, WEAPON_CATALOG.length - 1);
+      state.currentWeaponIndex = THREE.MathUtils.euclideanModulo(index, WEAPON_CATALOG.length);
       const w = WEAPON_CATALOG[state.currentWeaponIndex];
       document.getElementById('active-weapon-label').textContent = w.name;
 
-      // Update UI buttons highlight
       [1, 2, 3, 4].forEach((num, idx) => {
         const btn = document.getElementById(`btn-wpn-${num}`);
         if (!btn) return;
@@ -1571,7 +1893,6 @@
         }
       });
 
-      // Replace 3D gun mesh on player's right arm
       const limbs = state.player.mesh?.userData?.limbs;
       if (limbs && limbs.rightArm) {
         const oldWpn = state.player.mesh.userData.weaponMesh;
@@ -1581,13 +1902,13 @@
         limbs.rightArm.add(newWpn);
         state.player.mesh.userData.weaponMesh = newWpn;
       }
-      soundEngine.playBeep(680, 0.06);
+      soundEngine.playBeep(680, 0.05);
     }
 
     function firePrimaryWeapon() {
       const now = performance.now() / 1000;
       const wpn = WEAPON_CATALOG[state.currentWeaponIndex];
-      const fireDelay = state.controlMode === 'vehicle' ? 0.09 : wpn.fireRate;
+      const fireDelay = state.controlMode === 'vehicle' ? 0.085 : wpn.fireRate;
       if (now - state.lastFireTime < fireDelay) return;
       state.lastFireTime = now;
 
@@ -1597,6 +1918,13 @@
       let projSpeed = wpn.speed;
       let colorHex = wpn.color;
 
+      // Crosshair recoil pulse
+      const ring = document.getElementById('crosshair-ring');
+      if (ring) {
+        ring.style.transform = 'scale(1.28)';
+        setTimeout(() => { ring.style.transform = 'scale(1)'; }, 75);
+      }
+
       if (state.controlMode === 'vehicle' && state.activeVehicle) {
         const v = state.activeVehicle;
         dir.set(
@@ -1604,25 +1932,24 @@
           Math.sin(v.pitch),
           Math.cos(v.yaw) * Math.cos(v.pitch)
         ).normalize();
-        origin.copy(v.pos).add(new THREE.Vector3(0, 1.7, 0)).addScaledVector(dir, 4.8);
-        projSpeed = 280;
+        origin.copy(v.pos).add(new THREE.Vector3(0, 1.6, 0)).addScaledVector(dir, 4.8);
+        projSpeed = 310;
         colorHex = 0xfef08a;
         soundEngine.playBeep(260, 0.05, 'sawtooth', 0.08);
       } else {
-        // Shoot toward camera look direction
+        // Shoot directly along exact 3D camera crosshair vector!
         camera.getWorldDirection(dir);
-        dir.y = Math.max(-0.25, dir.y);
         dir.normalize();
         state.player.yaw = Math.atan2(dir.x, dir.z);
-        origin.copy(state.player.pos).add(new THREE.Vector3(0, 1.65, 0)).addScaledVector(dir, 1.4);
-        soundEngine.playBeep(wpn.id === 3 ? 140 : 380, 0.07, 'sawtooth', 0.09);
+        origin.copy(state.player.pos).add(new THREE.Vector3(0, 1.75, 0)).addScaledVector(dir, 1.45);
+        soundEngine.playBeep(wpn.id === 3 ? 140 : 390, 0.065, 'sawtooth', 0.09);
       }
 
       spawnProjectile({
         pos: origin,
         vel: dir.multiplyScalar(projSpeed),
         color: colorHex,
-        radius: isExplosive ? 0.35 : 0.18,
+        radius: isExplosive ? 0.36 : 0.19,
         explosive: isExplosive,
         homingTarget: null,
         fromPlayer: true,
@@ -1649,9 +1976,8 @@
         origin.copy(state.player.pos).add(new THREE.Vector3(0, 1.8, 0)).addScaledVector(dir, 1.6);
       }
 
-      // Find nearest target (Active SAM site or AI Aircraft/Car)
       let bestTarget = null;
-      let bestDist = 480;
+      let bestDist = 520;
 
       state.samSites.forEach(sam => {
         if (!sam.alive) return;
@@ -1672,7 +1998,7 @@
 
       spawnProjectile({
         pos: origin,
-        vel: dir.multiplyScalar(145),
+        vel: dir.multiplyScalar(155),
         color: 0xf97316,
         radius: 0.42,
         explosive: true,
@@ -1682,7 +2008,7 @@
         life: 5.5
       });
 
-      addBotFeedMessage('🚀 تم إطلاق صاروخ موجه نحو الهدف!');
+      addBotFeedMessage('🚀 تم إطلاق صاروخ موجه ذكي نحو الهدف!');
     }
 
     function spawnProjectile(opts) {
@@ -1711,15 +2037,15 @@
 
     function triggerExplosion(pos, scale = 1.0) {
       soundEngine.playExplosion();
-      const colors = [0xfef08a, 0xf97316, 0xef4444, 0x475569];
-      for (let i = 0; i < 14; i++) {
+      const colors = [0xfef08a, 0xf97316, 0xef4444, 0xf472b6, 0x334155];
+      for (let i = 0; i < 16; i++) {
         const c = colors[i % colors.length];
         const vel = new THREE.Vector3(
-          (Math.random() - 0.5) * 28 * scale,
-          Math.random() * 22 * scale,
-          (Math.random() - 0.5) * 28 * scale
+          (Math.random() - 0.5) * 32 * scale,
+          Math.random() * 25 * scale,
+          (Math.random() - 0.5) * 32 * scale
         );
-        spawnSmokeOrFlare(pos, c, (0.7 + Math.random() * 0.9) * scale, 1.1 + Math.random() * 0.6, vel);
+        spawnSmokeOrFlare(pos, c, (0.75 + Math.random() * 0.95) * scale, 1.15 + Math.random() * 0.6, vel);
       }
     }
 
@@ -1732,7 +2058,6 @@
         mesh: m,
         life,
         maxLife: life,
-        isFlare: colorHex === 0xfef08a,
         vel: vel || new THREE.Vector3((Math.random() - 0.5) * 2, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 2)
       });
     }
@@ -1743,18 +2068,17 @@
         : state.player.pos.clone().add(new THREE.Vector3(0, 2, 0));
 
       soundEngine.playBeep(880, 0.15);
-      for (let i = 0; i < 8; i++) {
-        const angle = (i / 8) * Math.PI * 2;
-        const vel = new THREE.Vector3(Math.cos(angle) * 16, -3 + Math.random() * 8, Math.sin(angle) * 16);
-        spawnSmokeOrFlare(origin, i % 2 === 0 ? 0xfef08a : 0xf97316, 0.6, 2.2, vel);
+      for (let i = 0; i < 10; i++) {
+        const angle = (i / 10) * Math.PI * 2;
+        const vel = new THREE.Vector3(Math.cos(angle) * 18, -3 + Math.random() * 9, Math.sin(angle) * 18);
+        spawnSmokeOrFlare(origin, i % 2 === 0 ? 0xfef08a : 0xf472b6, 0.62, 2.3, vel);
       }
 
-      // Divert any incoming SAM missiles away from the player!
       state.projectiles.forEach(p => {
         if (p.isSAM) {
           p.homingTarget = null;
-          p.vel.x += (Math.random() - 0.5) * 90;
-          p.vel.z += (Math.random() - 0.5) * 90;
+          p.vel.x += (Math.random() - 0.5) * 95;
+          p.vel.z += (Math.random() - 0.5) * 95;
         }
       });
       addBotFeedMessage('✨ تم إطلاق الشعلات الحرارية وتضليل الصواريخ المعادية!');
@@ -1767,10 +2091,11 @@
       if (!vehicle) return;
       state.controlMode = 'vehicle';
       state.activeVehicle = vehicle;
+      state.isAiming = false;
       state.player.mesh.visible = false;
       state.camYaw = vehicle.yaw + Math.PI;
-      state.camPitch = 0.22;
-      state.camDistance = vehicle.spec.type === 'airliner' ? 28 : 16;
+      state.camPitch = 0.2;
+      state.camDistance = vehicle.spec.type === 'airliner' ? 28 : (vehicle.spec.category === 'car' ? 11.5 : 16);
 
       soundEngine.playBeep(660, 0.12);
       updateHUDModeLabels();
@@ -1795,7 +2120,7 @@
       document.getElementById('sam-warning-banner').classList.add('hidden');
       soundEngine.playBeep(420, 0.1);
       updateHUDModeLabels();
-      addBotFeedMessage('🚶 نزلت من المركبة إلى وضع المشي والقتال الحر');
+      addBotFeedMessage('🚶 نزلت من المركبة إلى وضع المشي والتصويب الحر');
     }
 
     function toggleBoardOrExit() {
@@ -1841,14 +2166,15 @@
     }
 
     // =========================================================================
-    // GTA V-STYLE INTUITIVE FLIGHT & VEHICLE PHYSICS + WALKING
+    // GTA VI PLAYER WALKING, TPS AIMING & DRIFT/FLIGHT PHYSICS
     // =========================================================================
     function updatePlayerWalking(dt) {
       const p = state.player;
-      const moveSpeed = (state.keys['ShiftLeft'] || state.keys['ShiftRight']) ? 22 : 12;
+      const isSprinting = (state.keys['ShiftLeft'] || state.keys['ShiftRight']) && !state.isAiming;
+      const moveSpeed = state.isAiming ? 8.5 : (isSprinting ? 23 : 13);
+
       let moveForward = 0;
       let moveRight = 0;
-
       if (state.keys['KeyW'] || state.keys['ArrowUp']) moveForward += 1;
       if (state.keys['KeyS'] || state.keys['ArrowDown']) moveForward -= 1;
       if (state.keys['KeyA'] || state.keys['ArrowLeft']) moveRight -= 1;
@@ -1863,20 +2189,27 @@
 
       if (moveVec.lengthSq() > 0.01) {
         moveVec.normalize();
-        p.yaw = Math.atan2(moveVec.x, moveVec.z);
+        const targetYaw = (state.isAiming || state.isFiring)
+          ? Math.atan2(forwardDir.x, forwardDir.z)
+          : Math.atan2(moveVec.x, moveVec.z);
+        p.yaw = lerpAngle(p.yaw, targetYaw, dt * 14);
         p.pos.x += moveVec.x * moveSpeed * dt;
         p.pos.z += moveVec.z * moveSpeed * dt;
-        p.walkCycle += dt * (moveSpeed * 0.9);
+        p.walkCycle += dt * (moveSpeed * 0.85);
       } else {
         p.walkCycle = 0;
+        if (state.isAiming || state.isFiring) {
+          const aimYaw = Math.atan2(forwardDir.x, forwardDir.z);
+          p.yaw = lerpAngle(p.yaw, aimYaw, dt * 18);
+        }
       }
 
       const floorY = getSurfaceHeightAt(p.pos.x, p.pos.z);
       if (state.keys['Space'] && p.onGround) {
-        p.vel.y = 11.5;
+        p.vel.y = 12.0;
         p.onGround = false;
       }
-      p.vel.y -= 26 * dt;
+      p.vel.y -= 27 * dt;
       p.pos.y += p.vel.y * dt;
 
       if (p.pos.y <= floorY) {
@@ -1894,10 +2227,15 @@
         limbs.leftLeg.rotation.x = swing;
         limbs.rightLeg.rotation.x = -swing;
         limbs.leftArm.rotation.x = -swing * 0.7;
-        limbs.rightArm.rotation.x = -0.55 + swing * 0.25;
+        // Aim arm up/down with camera pitch when aiming or firing!
+        if (state.isAiming || state.isFiring) {
+          limbs.rightArm.rotation.x = -Math.PI * 0.5 - state.camPitch * 0.85;
+        } else {
+          limbs.rightArm.rotation.x = -0.55 + swing * 0.25;
+        }
       }
 
-      if (state.keys['KeyZ']) firePrimaryWeapon();
+      if (state.keys['KeyZ'] || state.isFiring) firePrimaryWeapon();
 
       let nearest = null;
       let minDist = 14.5;
@@ -1926,47 +2264,83 @@
       const spec = v.spec;
 
       document.getElementById('interaction-prompt').classList.add('hidden');
-      if (state.keys['KeyZ']) firePrimaryWeapon();
+      if (state.keys['KeyZ'] || state.isFiring) firePrimaryWeapon();
+
+      const nitroBoost = (state.keys['ShiftLeft'] || state.keys['ShiftRight']) ? 1.35 : 1.0;
 
       if (spec.category === 'car') {
+        const maxSpd = spec.maxSpeed * nitroBoost;
+        let accelInput = 0;
         if (state.keys['KeyW'] || state.keys['ArrowUp']) {
-          v.speed = Math.min(spec.maxSpeed, v.speed + spec.accel * dt * 1.4);
-          v.throttle = Math.min(1, v.throttle + dt * 2);
+          v.speed = Math.min(maxSpd, v.speed + spec.accel * nitroBoost * dt * 1.5);
+          v.throttle = Math.min(1, v.throttle + dt * 2.5);
+          accelInput = 1;
         } else if (state.keys['KeyS'] || state.keys['ArrowDown']) {
-          v.speed = Math.max(-spec.maxSpeed * 0.35, v.speed - spec.accel * dt * 1.8);
-          v.throttle = 0.2;
+          v.speed = Math.max(-spec.maxSpeed * 0.38, v.speed - spec.accel * dt * 2.0);
+          v.throttle = 0.25;
+          accelInput = -1;
         } else {
-          v.speed *= (1 - 1.5 * dt);
+          v.speed *= (1 - 1.35 * dt);
           v.throttle = Math.max(0, v.throttle - dt * 2);
         }
 
-        if (state.keys['Space']) v.speed *= (1 - 5 * dt);
-
-        if (Math.abs(v.speed) > 1) {
-          const dirSign = v.speed >= 0 ? 1 : -1;
-          if (state.keys['KeyA'] || state.keys['ArrowLeft']) v.yaw += spec.turnRate * dt * dirSign;
-          if (state.keys['KeyD'] || state.keys['ArrowRight']) v.yaw -= spec.turnRate * dt * dirSign;
+        // Handbrake Drift [Space]
+        const isDrifting = state.keys['Space'] && Math.abs(v.speed) > 35;
+        if (state.keys['Space']) {
+          v.speed *= (1 - (isDrifting ? 1.15 : 4.2) * dt);
         }
 
-        const moveStep = (v.speed / 3.6) * dt;
-        v.pos.x += Math.sin(v.yaw) * moveStep;
-        v.pos.z += Math.cos(v.yaw) * moveStep;
+        let steerInput = 0;
+        if (state.keys['KeyA'] || state.keys['ArrowLeft']) steerInput += 1;
+        if (state.keys['KeyD'] || state.keys['ArrowRight']) steerInput -= 1;
+
+        if (Math.abs(v.speed) > 1.5) {
+          const dirSign = v.speed >= 0 ? 1 : -1;
+          const driftMult = isDrifting ? 1.48 : 1.0;
+          v.yaw += steerInput * spec.turnRate * driftMult * dt * dirSign;
+        }
+
+        // Realistic velocity interpolation for drifting slip angle
+        const forwardVec = new THREE.Vector3(Math.sin(v.yaw), 0, Math.cos(v.yaw));
+        const desiredVel = forwardVec.clone().multiplyScalar(v.speed / 3.6);
+        const grip = isDrifting ? 2.4 : 8.5;
+        v.vel.lerp(desiredVel, Math.min(1, dt * grip));
+
+        v.pos.x += v.vel.x * dt;
+        v.pos.z += v.vel.z * dt;
         v.pos.y = 0;
-        v.pitch = 0;
-        v.roll = 0;
+
+        // Suspension Chassis Body Roll & Acceleration Pitch
+        const targetBodyRoll = -steerInput * Math.min(1, Math.abs(v.speed) / 140) * (isDrifting ? 0.14 : 0.08);
+        const targetBodyPitch = -accelInput * 0.035;
+        v.roll = THREE.MathUtils.lerp(v.roll, targetBodyRoll, dt * 8);
+        v.pitch = THREE.MathUtils.lerp(v.pitch, targetBodyPitch, dt * 8);
+
+        if (v.mesh.userData && v.mesh.userData.bodyGroup) {
+          v.mesh.userData.bodyGroup.rotation.z = v.roll;
+          v.mesh.userData.bodyGroup.rotation.x = v.pitch;
+        }
+
+        // Tire Smoke on Drift or Nitro Flame
+        if (isDrifting && Math.random() < 0.75) {
+          const rearL = v.pos.clone().add(new THREE.Vector3(-Math.sin(v.yaw) * 2.1, 0.2, -Math.cos(v.yaw) * 2.1));
+          spawnSmokeOrFlare(rearL, 0xe2e8f0, 0.45, 0.75, new THREE.Vector3(0, 0.8, 0));
+          if (Math.random() < 0.25) soundEngine.playBeep(190 + Math.random() * 40, 0.04, 'sawtooth', 0.03);
+        }
+        if (nitroBoost > 1 && v.speed > 40 && Math.random() < 0.7) {
+          const exhaustPos = v.pos.clone().add(new THREE.Vector3(-Math.sin(v.yaw) * 2.4, 0.45, -Math.cos(v.yaw) * 2.4));
+          spawnSmokeOrFlare(exhaustPos, 0x38bdf8, 0.32, 0.25, new THREE.Vector3(0, 0.2, 0));
+        }
 
       } else if (spec.type === 'helicopter') {
-        // GTA V-Style Helicopter Controls:
-        // W/S: Smooth Climb/Descend, Arrows: Pitch Forward/Back & Bank Left/Right, A/D: Rotate Yaw
         const groundY = getSurfaceHeightAt(v.pos.x, v.pos.z);
         if (state.keys['KeyW']) {
           v.throttle = Math.min(1, v.throttle + dt * 1.2);
-          v.verticalSpeed = THREE.MathUtils.lerp(v.verticalSpeed, 22, dt * 4);
+          v.verticalSpeed = THREE.MathUtils.lerp(v.verticalSpeed, 24, dt * 4);
         } else if (state.keys['KeyS']) {
           v.throttle = Math.max(0.2, v.throttle - dt * 1.2);
           v.verticalSpeed = THREE.MathUtils.lerp(v.verticalSpeed, -18, dt * 4);
         } else {
-          // Auto-hover in place like GTA V!
           v.throttle = v.pos.y > groundY + 0.3 ? 0.55 : 0;
           v.verticalSpeed = THREE.MathUtils.lerp(v.verticalSpeed, 0, dt * 6);
         }
@@ -1978,21 +2352,21 @@
 
         let targetPitch = 0;
         let targetRoll = 0;
-        if (state.keys['ArrowUp'] || state.keys['KeyI']) targetPitch = -0.28; // Tilt nose forward to accelerate
-        if (state.keys['ArrowDown'] || state.keys['KeyK']) targetPitch = 0.25; // Tilt back to slow/reverse
+        if (state.keys['ArrowUp'] || state.keys['KeyI']) targetPitch = -0.30;
+        if (state.keys['ArrowDown'] || state.keys['KeyK']) targetPitch = 0.25;
         if (state.keys['ArrowLeft'] || state.keys['KeyJ']) {
-          targetRoll = 0.35;
-          v.yaw += 0.65 * dt;
+          targetRoll = 0.38;
+          v.yaw += 0.7 * dt;
         }
         if (state.keys['ArrowRight'] || state.keys['KeyL']) {
-          targetRoll = -0.35;
-          v.yaw -= 0.65 * dt;
+          targetRoll = -0.38;
+          v.yaw -= 0.7 * dt;
         }
 
         v.pitch = THREE.MathUtils.lerp(v.pitch, targetPitch, dt * 4.5);
         v.roll = THREE.MathUtils.lerp(v.roll, targetRoll, dt * 4.5);
 
-        const targetForwardSpd = -targetPitch * spec.maxSpeed * 3.1;
+        const targetForwardSpd = -targetPitch * spec.maxSpeed * 3.1 * nitroBoost;
         v.speed = THREE.MathUtils.lerp(v.speed, targetForwardSpd, dt * 2.5);
 
         const moveDist = (v.speed / 3.6) * dt;
@@ -2000,59 +2374,48 @@
         v.pos.z += Math.cos(v.yaw) * moveDist;
 
       } else {
-        // ===================================================================
-        // GTA V-STYLE FIXED-WING AIRCRAFT CONTROLS (WITH AUTO-STABILIZATION!)
-        // ===================================================================
-        // W / S: Throttle Up / Down
-        if (state.keys['KeyW']) v.throttle = Math.min(1, v.throttle + 0.65 * dt);
-        if (state.keys['KeyS']) v.throttle = Math.max(0, v.throttle - 0.75 * dt);
+        // GTA VI FIXED-WING JET & PLANE CONTROLS
+        if (state.keys['KeyW'] || state.keys['ShiftLeft']) v.throttle = Math.min(1, v.throttle + 0.7 * dt);
+        if (state.keys['KeyS']) v.throttle = Math.max(0, v.throttle - 0.8 * dt);
 
-        const targetSpeed = v.throttle * spec.maxSpeed;
-        v.speed = THREE.MathUtils.lerp(v.speed, targetSpeed, dt * 1.6);
-        if (state.keys['Space']) v.speed = Math.max(0, v.speed - spec.accel * 1.5 * dt);
+        const targetSpeed = v.throttle * spec.maxSpeed * nitroBoost;
+        v.speed = THREE.MathUtils.lerp(v.speed, targetSpeed, dt * 1.7);
+        if (state.keys['Space']) v.speed = Math.max(0, v.speed - spec.accel * 1.6 * dt);
 
         const groundY = getSurfaceHeightAt(v.pos.x, v.pos.z);
         const airborne = v.pos.y > groundY + 0.3;
 
-        // GTA Rudder Steering (A / D or Q / E) works smoothly on runway AND in the air
         if (state.keys['KeyA'] || state.keys['KeyQ']) {
-          v.yaw += spec.turnRate * 0.75 * dt;
+          v.yaw += spec.turnRate * 0.78 * dt;
           if (airborne && !state.keys['ArrowLeft'] && !state.keys['ArrowRight']) {
-            v.roll = THREE.MathUtils.lerp(v.roll, 0.35, dt * 4);
+            v.roll = THREE.MathUtils.lerp(v.roll, 0.38, dt * 4);
           }
         } else if (state.keys['KeyD'] || state.keys['KeyE']) {
-          v.yaw -= spec.turnRate * 0.75 * dt;
+          v.yaw -= spec.turnRate * 0.78 * dt;
           if (airborne && !state.keys['ArrowLeft'] && !state.keys['ArrowRight']) {
-            v.roll = THREE.MathUtils.lerp(v.roll, -0.35, dt * 4);
+            v.roll = THREE.MathUtils.lerp(v.roll, -0.38, dt * 4);
           }
         }
 
-        // Pitch: ArrowDown / K = Pull Up (Climb), ArrowUp / I = Push Nose Down
-        // Auto-Takeoff assist when throttle is high on runway!
         let desiredPitch = 0;
         if (state.keys['ArrowDown'] || state.keys['KeyK']) {
-          desiredPitch = 0.52;
+          desiredPitch = 0.54;
         } else if (state.keys['ArrowUp'] || state.keys['KeyI']) {
           desiredPitch = -0.48;
         } else if (!airborne && v.speed >= spec.takeoffSpeed) {
-          desiredPitch = 0.22; // Smooth GTA-style automatic takeoff liftoff!
-        } else {
-          // Smoothly auto-level pitch in the air so plane flies straight and steady!
-          desiredPitch = 0;
+          desiredPitch = 0.24;
         }
-        v.pitch = THREE.MathUtils.lerp(v.pitch, desiredPitch, dt * 3.8);
+        v.pitch = THREE.MathUtils.lerp(v.pitch, desiredPitch, dt * 4.0);
 
-        // Roll: ArrowLeft / ArrowRight banks the wings & turns smoothly, and auto-levels when released!
         if (airborne) {
           if (state.keys['ArrowLeft'] || state.keys['KeyJ']) {
-            v.roll = THREE.MathUtils.lerp(v.roll, 0.85, dt * 4.2);
+            v.roll = THREE.MathUtils.lerp(v.roll, 0.88, dt * 4.5);
           } else if (state.keys['ArrowRight'] || state.keys['KeyL']) {
-            v.roll = THREE.MathUtils.lerp(v.roll, -0.85, dt * 4.2);
+            v.roll = THREE.MathUtils.lerp(v.roll, -0.88, dt * 4.5);
           } else if (!state.keys['KeyA'] && !state.keys['KeyD']) {
-            // Automatic wing-leveling stabilizer!
-            v.roll = THREE.MathUtils.lerp(v.roll, 0, dt * 3.5);
+            v.roll = THREE.MathUtils.lerp(v.roll, 0, dt * 3.8);
           }
-          v.yaw += v.roll * 0.95 * dt;
+          v.yaw += v.roll * 0.98 * dt;
         } else {
           v.roll = THREE.MathUtils.lerp(v.roll, 0, dt * 6);
         }
@@ -2078,8 +2441,10 @@
       v.mesh.position.copy(v.pos);
       v.mesh.rotation.order = 'YXZ';
       v.mesh.rotation.y = v.yaw;
-      v.mesh.rotation.x = -v.pitch;
-      v.mesh.rotation.z = -v.roll;
+      if (spec.category !== 'car') {
+        v.mesh.rotation.x = -v.pitch;
+        v.mesh.rotation.z = -v.roll;
+      }
 
       const ud = v.mesh.userData;
       if (ud) {
@@ -2088,14 +2453,14 @@
           r.mesh.rotation[r.axis] += r.speed * spinMult * dt;
         });
         ud.afterburners.forEach(b => {
-          b.visible = v.throttle > 0.55;
-          if (b.visible) b.scale.setScalar(0.85 + Math.random() * 0.35);
+          b.visible = v.throttle > 0.5 || nitroBoost > 1;
+          if (b.visible) b.scale.setScalar(0.85 + Math.random() * 0.4);
         });
       }
 
       if ((state.smokeEnabled || spec.type === 'stunt') && v.speed > 65 && Math.random() < 0.45) {
         const tailPos = v.pos.clone().add(new THREE.Vector3(-Math.sin(v.yaw) * 4.5, 1.5, -Math.cos(v.yaw) * 4.5));
-        spawnSmokeOrFlare(tailPos, 0xf8fafc, 0.55, 1.2, new THREE.Vector3(0, 0.4, 0));
+        spawnSmokeOrFlare(tailPos, 0xf472b6, 0.55, 1.2, new THREE.Vector3(0, 0.4, 0));
       }
     }
 
@@ -2108,10 +2473,18 @@
         : state.player.pos;
       const playerAirborne = state.controlMode === 'vehicle' && state.activeVehicle && state.activeVehicle.pos.y > 14;
 
-      let activeSAMLock = false;
+      if (state.wantedLevel > 0) {
+        state.wantedDecayTimer -= dt;
+        if (state.wantedDecayTimer <= 0) {
+          state.wantedLevel = Math.max(0, state.wantedLevel - 1);
+          state.wantedDecayTimer = 15;
+          updateWantedUI();
+        }
+      }
 
-      // 1. Update SAM Defense Sites
+      let activeSAMLock = false;
       let aliveSAMCount = 0;
+
       state.samSites.forEach(sam => {
         if (!sam.alive) {
           sam.respawnTimer -= dt;
@@ -2132,7 +2505,6 @@
           ud.turret.rotation.y = angleToPlayer;
         }
 
-        // Fire SAM Interceptor if SAM is active and player is flying in range
         if (state.samActive && playerAirborne && distToPlayer < 420) {
           activeSAMLock = true;
           sam.cooldown -= dt;
@@ -2160,7 +2532,6 @@
 
       document.getElementById('sam-sites-count').textContent = aliveSAMCount;
 
-      // Check if any SAM missile is currently flying toward player
       const incomingSAM = state.projectiles.some(p => p.isSAM && p.homingTarget !== null);
       const banner = document.getElementById('sam-warning-banner');
       if (incomingSAM || (activeSAMLock && state.samActive)) {
@@ -2169,16 +2540,14 @@
         banner.classList.add('hidden');
       }
 
-      // 2. Update All Projectiles & Missiles
       for (let i = state.projectiles.length - 1; i >= 0; i--) {
         const p = state.projectiles[i];
         p.life -= dt;
 
-        // Homing Steering
         if (p.homingTarget) {
           const desiredDir = p.homingTarget.clone().sub(p.pos).normalize();
           const currentSpd = p.vel.length();
-          p.vel.lerp(desiredDir.multiplyScalar(currentSpd), dt * 3.2);
+          p.vel.lerp(desiredDir.multiplyScalar(currentSpd), dt * 3.4);
           p.mesh.lookAt(p.pos.clone().add(p.vel));
         }
 
@@ -2189,55 +2558,55 @@
         }
 
         let hit = false;
-
-        // Ground impact
         if (p.pos.y <= getSurfaceHeightAt(p.pos.x, p.pos.z)) {
           hit = true;
         }
 
         if (p.fromPlayer) {
-          // Check hits on SAM Batteries
           state.samSites.forEach(sam => {
             if (sam.alive && sam.pos.distanceTo(p.pos) < 5.5) {
               sam.alive = false;
               sam.respawnTimer = 18;
               sam.mesh.visible = false;
               hit = true;
-              state.kills++;
+              addKillAndWanted(2500);
               triggerExplosion(sam.pos, 1.5);
-              addBotFeedMessage(`💥 دمرت ${sam.name}! (+1 هدف)`);
+              addBotFeedMessage(`💥 دمرت ${sam.name}! (+$2,500)`);
             }
           });
 
-          // Check hits on AI Planes
           state.aiPlanes.forEach(bot => {
             if (bot.mesh.position.distanceTo(p.pos) < 6.5) {
               hit = true;
-              state.kills++;
+              addKillAndWanted(3000);
               triggerExplosion(bot.mesh.position.clone(), 1.4);
-              bot.angle += Math.PI; // Respawn on opposite side of air loop
-              addBotFeedMessage(`🎯 أسقطت طائرة البوت [${bot.name}]!`);
+              bot.angle += Math.PI;
+              addBotFeedMessage(`🎯 أسقطت طائرة [${bot.name}]! (+$3,000)`);
             }
           });
 
-          // Check hits on AI Cars
           state.aiCars.forEach(car => {
             if (car.mesh.position.distanceTo(p.pos) < 3.8) {
               hit = true;
-              state.kills++;
+              addKillAndWanted(1000);
               triggerExplosion(car.mesh.position.clone(), 1.1);
               car.mesh.position.z = -car.mesh.position.z;
             }
           });
         } else {
-          // Enemy / SAM projectile hitting Player
           if (playerTargetPos.distanceTo(p.pos) < 4.8) {
             hit = true;
             triggerExplosion(p.pos.clone(), 1.2);
-            state.health = Math.max(10, state.health - (p.isSAM ? 25 : 8));
+            const dmg = p.isSAM ? 24 : 8;
+            if (state.armor > 0) {
+              state.armor = Math.max(0, state.armor - dmg);
+            } else {
+              state.health = Math.max(10, state.health - dmg);
+            }
             if (state.health <= 15) {
               state.health = 100;
-              addBotFeedMessage('🛠️ تم إصلاح الدروع واستعادة الطاقة الكاملة 100%');
+              state.armor = 100;
+              addBotFeedMessage('🛠️ تم استعادة الصحة والدروع الكاملة 100%');
             }
           }
         }
@@ -2250,6 +2619,9 @@
       }
 
       document.getElementById('hud-health').textContent = state.health;
+      document.getElementById('hud-armor').textContent = state.armor;
+      document.getElementById('hud-health-bar').style.width = `${state.health}%`;
+      document.getElementById('hud-armor-bar').style.width = `${state.armor}%`;
       document.getElementById('hud-kills').textContent = state.kills;
     }
 
@@ -2259,7 +2631,6 @@
         ? state.activeVehicle.pos
         : state.player.pos;
 
-      // 1. AI Aircraft
       state.aiPlanes.forEach((bot, idx) => {
         bot.angle += bot.speed * behaviorMult * dt;
         let tx = bot.centerX + Math.cos(bot.angle) * bot.radius;
@@ -2303,7 +2674,6 @@
         }
       });
 
-      // 2. AI Traffic Cars
       state.aiCars.forEach(car => {
         const step = car.speed * behaviorMult * dt * car.dir;
         if (car.axis === 'z') {
@@ -2317,7 +2687,6 @@
         }
       });
 
-      // 3. AI Stylized Character Bots
       state.aiPeds.forEach(ped => {
         ped.timer -= dt;
         if (ped.timer <= 0) {
@@ -2344,7 +2713,6 @@
         }
       });
 
-      // 4. Particles
       for (let i = state.particles.length - 1; i >= 0; i--) {
         const pt = state.particles[i];
         pt.life -= dt;
@@ -2360,17 +2728,35 @@
     }
 
     // =========================================================================
-    // CAMERA & HUD
+    // GTA VI 360° FREE MOUSE CAMERA, OVER-THE-SHOULDER AIMING & DYNAMIC FOV
     // =========================================================================
     function updateCamera(dt) {
+      const isSprinting = (state.keys['ShiftLeft'] || state.keys['ShiftRight']) && !state.isAiming;
+      const targetFov = state.isAiming ? 44 : (isSprinting ? 72 : 62);
+      if (Math.abs(camera.fov - targetFov) > 0.1) {
+        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, dt * 10);
+        camera.updateProjectionMatrix();
+      }
+
       if (state.controlMode === 'walk') {
-        const target = state.player.pos.clone().add(new THREE.Vector3(0, 2.2, 0));
-        const dist = state.cameraMode === 1 ? 0.4 : 8.2;
-        const cx = target.x + Math.sin(state.camYaw) * Math.cos(state.camPitch) * dist;
-        const cy = Math.max(0.8, target.y + Math.sin(state.camPitch) * dist);
-        const cz = target.z + Math.cos(state.camYaw) * Math.cos(state.camPitch) * dist;
-        camera.position.lerp(new THREE.Vector3(cx, cy, cz), Math.min(1, dt * 12));
-        camera.lookAt(target);
+        const p = state.player;
+        const forward = new THREE.Vector3(-Math.sin(state.camYaw) * Math.cos(state.camPitch), -Math.sin(state.camPitch), -Math.cos(state.camYaw) * Math.cos(state.camPitch)).normalize();
+        const right = new THREE.Vector3(Math.cos(state.camYaw), 0, -Math.sin(state.camYaw)).normalize();
+
+        // GTA VI Over-The-Shoulder offset (shifts right & closer when right-click aiming)
+        const shoulderOffset = state.isAiming ? 0.85 : 0.45;
+        const dist = state.cameraMode === 1 ? 0.35 : (state.isAiming ? 3.6 : 7.4);
+
+        const pivot = p.pos.clone()
+          .add(new THREE.Vector3(0, 2.15, 0))
+          .addScaledVector(right, shoulderOffset);
+
+        const desiredCamPos = pivot.clone().addScaledVector(forward, -dist);
+        desiredCamPos.y = Math.max(getSurfaceHeightAt(desiredCamPos.x, desiredCamPos.z) + 0.65, desiredCamPos.y);
+
+        camera.position.lerp(desiredCamPos, Math.min(1, dt * 18));
+        const lookAtPoint = pivot.clone().addScaledVector(forward, 45);
+        camera.lookAt(lookAtPoint);
         return;
       }
 
@@ -2393,16 +2779,21 @@
         );
         camera.lookAt(v.pos.clone().add(new THREE.Vector3(0, 1.8, 0)));
       } else {
-        const chaseYaw = state.isDragging ? state.camYaw : (v.yaw + Math.PI);
-        if (!state.isDragging) state.camYaw = chaseYaw;
+        // Free 360 Mouse Orbit around Vehicle + Smooth Auto-Follow after 1.8s
+        if (state.camFollowTimer > 0) {
+          state.camFollowTimer -= dt;
+        } else if (Math.abs(v.speed) > 8) {
+          state.camYaw = lerpAngle(state.camYaw, v.yaw + Math.PI, dt * 3.2);
+        }
+        const chaseYaw = state.camYaw;
         const dist = state.camDistance;
         const desired = new THREE.Vector3(
-          v.pos.x + Math.sin(chaseYaw) * dist,
-          Math.max(1.5, v.pos.y + 4.8 + Math.sin(state.camPitch) * dist * 0.4),
-          v.pos.z + Math.cos(chaseYaw) * dist
+          v.pos.x + Math.sin(chaseYaw) * Math.cos(state.camPitch) * dist,
+          Math.max(1.4, v.pos.y + 3.2 + Math.sin(state.camPitch) * dist * 0.65),
+          v.pos.z + Math.cos(chaseYaw) * Math.cos(state.camPitch) * dist
         );
-        camera.position.lerp(desired, Math.min(1, dt * 9));
-        camera.lookAt(v.pos.clone().add(new THREE.Vector3(0, 1.9, 0)));
+        camera.position.lerp(desired, Math.min(1, dt * 14));
+        camera.lookAt(v.pos.clone().add(new THREE.Vector3(0, 1.65, 0)));
       }
     }
 
@@ -2440,7 +2831,7 @@
         }
       } else {
         const moveKeys = state.keys['KeyW'] || state.keys['KeyS'] || state.keys['KeyA'] || state.keys['KeyD'];
-        spd = moveKeys ? ((state.keys['ShiftLeft'] || state.keys['ShiftRight']) ? 22 : 12) : 0;
+        spd = moveKeys ? ((state.keys['ShiftLeft'] || state.keys['ShiftRight']) ? 23 : 13) : 0;
         alt = Math.round(state.player.pos.y);
         thr = moveKeys ? 100 : 0;
       }
@@ -2450,67 +2841,72 @@
       document.getElementById('hud-throttle-pct').textContent = `${thr}%`;
       document.getElementById('hud-throttle-bar').style.width = `${thr}%`;
 
-      radarCtx.fillStyle = '#050b16';
-      radarCtx.fillRect(0, 0, 155, 155);
+      radarCtx.fillStyle = '#070b16';
+      radarCtx.fillRect(0, 0, 160, 160);
 
-      radarCtx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+      radarCtx.strokeStyle = 'rgba(244, 114, 182, 0.25)';
       radarCtx.lineWidth = 1;
-      [32, 62].forEach(r => {
+      [34, 66].forEach(r => {
         radarCtx.beginPath();
-        radarCtx.arc(77, 77, r, 0, Math.PI * 2);
+        radarCtx.arc(80, 80, r, 0, Math.PI * 2);
         radarCtx.stroke();
       });
 
       const scale = 0.14;
       const toRadar = (wx, wz) => ({
-        x: 77 + (wx - refPos.x) * scale,
-        y: 77 + (wz - refPos.z) * scale
+        x: 80 + (wx - refPos.x) * scale,
+        y: 80 + (wz - refPos.z) * scale
       });
+
+      // Vice Beach strip on radar
+      const beachPos = toRadar(-365, 0);
+      radarCtx.fillStyle = 'rgba(253, 230, 138, 0.25)';
+      radarCtx.fillRect(beachPos.x - 5, beachPos.y - 45, 10, 90);
 
       // Runways
       radarCtx.fillStyle = 'rgba(148, 163, 184, 0.35)';
       const rwyPos = toRadar(330, 0);
       radarCtx.fillRect(rwyPos.x - 3, rwyPos.y - 35, 6, 70);
 
-      // SAM Batteries (Red squares)
+      // SAM Batteries
       state.samSites.forEach(sam => {
         if (!sam.alive) return;
         const p = toRadar(sam.pos.x, sam.pos.z);
-        if (p.x >= 4 && p.x <= 150 && p.y >= 4 && p.y <= 150) {
+        if (p.x >= 4 && p.x <= 155 && p.y >= 4 && p.y <= 155) {
           radarCtx.fillStyle = '#ef4444';
           radarCtx.fillRect(p.x - 3, p.y - 3, 6, 6);
         }
       });
 
-      // AI Planes (Blue circles)
+      // AI Planes
       state.aiPlanes.forEach(b => {
         const p = toRadar(b.mesh.position.x, b.mesh.position.z);
-        if (p.x >= 4 && p.x <= 150 && p.y >= 4 && p.y <= 150) {
-          radarCtx.fillStyle = '#0ea5e9';
+        if (p.x >= 4 && p.x <= 155 && p.y >= 4 && p.y <= 155) {
+          radarCtx.fillStyle = '#38bdf8';
           radarCtx.beginPath();
           radarCtx.arc(p.x, p.y, 3, 0, Math.PI * 2);
           radarCtx.fill();
         }
       });
 
-      // AI Pedestrians (Purple dots)
+      // AI Pedestrians
       state.aiPeds.forEach(ped => {
         const p = toRadar(ped.mesh.position.x, ped.mesh.position.z);
-        if (p.x >= 4 && p.x <= 150 && p.y >= 4 && p.y <= 150) {
-          radarCtx.fillStyle = '#c084fc';
+        if (p.x >= 4 && p.x <= 155 && p.y >= 4 && p.y <= 155) {
+          radarCtx.fillStyle = '#f472b6';
           radarCtx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
         }
       });
 
       // Player Center Marker
       radarCtx.save();
-      radarCtx.translate(77, 77);
+      radarCtx.translate(80, 80);
       radarCtx.rotate(-refYaw + Math.PI);
       radarCtx.fillStyle = '#4ade80';
       radarCtx.beginPath();
-      radarCtx.moveTo(0, -6);
-      radarCtx.lineTo(4.5, 5);
-      radarCtx.lineTo(-4.5, 5);
+      radarCtx.moveTo(0, -6.5);
+      radarCtx.lineTo(4.8, 5.5);
+      radarCtx.lineTo(-4.8, 5.5);
       radarCtx.closePath();
       radarCtx.fill();
       radarCtx.restore();
@@ -2524,20 +2920,22 @@
 
       if (state.controlMode === 'vehicle' && state.activeVehicle) {
         const spec = state.activeVehicle.spec;
-        badge.textContent = spec.category === 'car' ? 'وضع قيادة السيارة' : 'وضع طيران GTA والقتال الجوي';
+        badge.textContent = spec.category === 'car' ? 'وضع قيادة ودريفت GTA VI' : 'وضع طيران وقتال جوي GTA VI';
         badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-sky-500/25 text-sky-300 border border-sky-400/50';
-        label.textContent = `المركبة: ${spec.name} (اضغط Z للرشاش و M للصواريخ)`;
-        statusEl.textContent = spec.category === 'car' ? 'محرك نشط' : 'طيران متوازن';
+        label.textContent = spec.category === 'car'
+          ? `المركبة: ${spec.name} | [Space] دريفت | [Shift] نيترو | الماوس كاميرا 360°`
+          : `الطائرة: ${spec.name} | [W/S] المحرك | [الأسهم] الطيران | [M] صواريخ`;
+        statusEl.textContent = spec.category === 'car' ? 'دريفت + نيترو جاهز' : 'طيران متوازن';
         if (spec.category === 'aircraft') {
           sysRow.classList.remove('hidden');
         } else {
           sysRow.classList.add('hidden');
         }
       } else {
-        badge.textContent = 'وضع المشي الحر';
-        badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
-        label.textContent = 'الشخصية: مقاتل وطيار المدينة (اضغط 1-4 للأسلحة و F لركوب الطائرات)';
-        statusEl.textContent = 'مسلح وجاهز';
+        badge.textContent = 'وضع المشي الحر (GTA TPS)';
+        badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/40';
+        label.textContent = 'حرك الماوس للنظر 360° | كليك يمين للتصويب الدقيق | كليك يسار للإطلاق | [F] لركوب المركبات';
+        statusEl.textContent = state.pointerLocked ? 'ماوس 360° مقفول ونشط' : 'اضغط الشاشة لقفل الماوس';
         sysRow.classList.add('hidden');
       }
     }
@@ -2554,26 +2952,26 @@
     }
 
     // =========================================================================
-    // UI EVENTS & HANDLERS
+    // UI EVENTS, FULL MOUSE POINTER LOCK & VS CODE COPY HANDLERS
     // =========================================================================
     function renderFleetModal() {
       const grid = document.getElementById('fleet-grid');
       grid.innerHTML = '';
       FLEET_CATALOG.forEach(item => {
         const card = document.createElement('div');
-        card.className = 'bg-slate-900/90 border border-slate-700/80 hover:border-sky-400 rounded-xl p-3.5 flex flex-col justify-between transition';
+        card.className = 'bg-slate-900/90 border border-slate-700/80 hover:border-pink-400 rounded-xl p-3.5 flex flex-col justify-between transition';
         const icon = item.category === 'car' ? '🏎️' : (item.type === 'helicopter' ? '🚁' : (item.type === 'jet' ? '🚀' : '✈️'));
         card.innerHTML = `
           <div>
             <div class="flex items-center justify-between mb-1">
               <span class="text-lg">${icon}</span>
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 mono">السرعة: ${item.maxSpeed} كم/س</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-pink-500/20 text-pink-300 mono">السرعة: ${item.maxSpeed} كم/س</span>
             </div>
             <h3 class="font-bold text-sm text-white">${item.name}</h3>
             <p class="text-[11px] text-sky-300 mb-1.5">${item.subtitle}</p>
             <p class="text-[11px] text-slate-400 leading-relaxed">${item.desc}</p>
           </div>
-          <button data-spawn-id="${item.id}" class="mt-3 w-full py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs transition">
+          <button data-spawn-id="${item.id}" class="mt-3 w-full py-1.5 rounded-lg bg-gradient-to-r from-pink-500 to-orange-400 hover:from-pink-400 hover:to-orange-300 text-slate-950 font-extrabold text-xs transition">
             اركب وجرب الآن فوراً
           </button>
         `;
@@ -2588,7 +2986,32 @@
       });
     }
 
+    function requestGamePointerLock() {
+      soundEngine.init();
+      if (document.pointerLockElement !== canvas && canvas.requestPointerLock) {
+        try {
+          canvas.requestPointerLock();
+        } catch (e) {}
+      }
+    }
+
     function bindEvents() {
+      // Pointer Lock Listener
+      document.addEventListener('pointerlockchange', () => {
+        state.pointerLocked = (document.pointerLockElement === canvas);
+        const bannerText = document.getElementById('mouse-lock-text');
+        if (state.pointerLocked) {
+          bannerText.textContent = '✅ الماوس متصل 360° (GTA VI) — كليك يمين للتصويب | كليك يسار للإطلاق | [ESC] لإظهار المؤشر';
+        } else {
+          bannerText.textContent = '🖱️ اضغط هنا أو داخل الشاشة لتفعيل تحكم الماوس الحر 360° (GTA VI)';
+          state.isFiring = false;
+          state.isAiming = false;
+        }
+        updateHUDModeLabels();
+      });
+
+      document.getElementById('btn-lock-mouse').addEventListener('click', requestGamePointerLock);
+
       window.addEventListener('keydown', (e) => {
         soundEngine.init();
         state.keys[e.code] = true;
@@ -2605,6 +3028,8 @@
           fireCountermeasureFlares();
         } else if (e.code === 'KeyM') {
           fireGuidedMissile();
+        } else if (e.code === 'KeyP') {
+          document.getElementById('modal-vscode').classList.toggle('hidden');
         } else if (e.code === 'Digit1') {
           selectWeapon(0);
         } else if (e.code === 'Digit2') {
@@ -2620,34 +3045,54 @@
         state.keys[e.code] = false;
       });
 
+      // Full GTA VI Mouse Control (Pointer Lock + Fallback Drag + Right-Click ADS + Left-Click Auto-Fire)
+      canvas.addEventListener('click', () => {
+        requestGamePointerLock();
+      });
+
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
       canvas.addEventListener('mousedown', (e) => {
         soundEngine.init();
+        if (e.button === 0) {
+          state.isFiring = true;
+          firePrimaryWeapon();
+        } else if (e.button === 2) {
+          state.isAiming = true;
+        }
         state.isDragging = true;
-        state.mouseDownTime = performance.now();
         state.lastMouseX = e.clientX;
         state.lastMouseY = e.clientY;
       });
 
       window.addEventListener('mousemove', (e) => {
-        if (!state.isDragging) return;
-        const dx = e.clientX - state.lastMouseX;
-        const dy = e.clientY - state.lastMouseY;
+        const locked = (document.pointerLockElement === canvas);
+        if (!locked && !state.isDragging) return;
+
+        const dx = locked ? e.movementX : (e.clientX - state.lastMouseX);
+        const dy = locked ? e.movementY : (e.clientY - state.lastMouseY);
         state.lastMouseX = e.clientX;
         state.lastMouseY = e.clientY;
-        state.camYaw -= dx * 0.0065;
-        state.camPitch = THREE.MathUtils.clamp(state.camPitch + dy * 0.005, 0.05, 1.25);
+
+        const sens = state.isAiming ? 0.0022 : 0.0038;
+        state.camYaw -= dx * sens;
+        state.camPitch = THREE.MathUtils.clamp(state.camPitch + dy * sens, -0.35, 1.32);
+        state.camFollowTimer = 1.8;
       });
 
-      window.addEventListener('mouseup', () => {
-        // Quick click fires weapon!
-        if (performance.now() - state.mouseDownTime < 210) {
-          firePrimaryWeapon();
-        }
+      window.addEventListener('mouseup', (e) => {
+        if (e.button === 0) state.isFiring = false;
+        if (e.button === 2) state.isAiming = false;
         state.isDragging = false;
       });
 
       canvas.addEventListener('wheel', (e) => {
-        state.camDistance = THREE.MathUtils.clamp(state.camDistance + e.deltaY * 0.015, 7, 45);
+        if (state.controlMode === 'walk') {
+          // Scroll wheel cycles weapons in walk mode like GTA!
+          selectWeapon(state.currentWeaponIndex + (e.deltaY > 0 ? 1 : -1));
+        } else {
+          state.camDistance = THREE.MathUtils.clamp(state.camDistance + e.deltaY * 0.015, 7, 45);
+        }
       }, { passive: true });
 
       window.addEventListener('resize', () => {
@@ -2674,8 +3119,36 @@
         state.samActive = !state.samActive;
         const btn = document.getElementById('btn-toggle-sam');
         btn.textContent = state.samActive
-          ? '🛡️ منظومة الدفاع الجوي (SAM): نشطة وتطلق صواريخ'
+          ? '🛡️ منظومة الدفاع الجوي (SAM): نشطة'
           : '🛡️ منظومة الدفاع الجوي (SAM): متوقفة (طيران آمن)';
+      });
+
+      // VS Code Guide Modal & One-Click Full Copy
+      document.getElementById('btn-vscode-guide').addEventListener('click', () => {
+        if (document.exitPointerLock) try { document.exitPointerLock(); } catch (e) {}
+        document.getElementById('modal-vscode').classList.toggle('hidden');
+      });
+      document.getElementById('btn-close-vscode').addEventListener('click', () => {
+        document.getElementById('modal-vscode').classList.add('hidden');
+      });
+      document.getElementById('btn-copy-full-html').addEventListener('click', () => {
+        const fullSource = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+        const btn = document.getElementById('btn-copy-full-html');
+        try {
+          navigator.clipboard.writeText(fullSource);
+          btn.textContent = '✅ تم نسخ الكود بالكامل! الصقه في VS Code بـ Ctrl+V';
+        } catch (err) {
+          const ta = document.createElement('textarea');
+          ta.value = fullSource;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          btn.textContent = '✅ تم نسخ الكود بالكامل! الصقه في VS Code بـ Ctrl+V';
+        }
+        setTimeout(() => {
+          btn.textContent = '📋 نسخ الكود الكامل المعدل لـ VS Code';
+        }, 3500);
       });
 
       document.getElementById('btn-spawn-menu').addEventListener('click', () => {
@@ -2693,10 +3166,18 @@
         document.getElementById('modal-controls').classList.add('hidden');
       });
 
+      document.getElementById('btn-teleport-beach').addEventListener('click', () => {
+        soundEngine.init();
+        if (state.controlMode === 'vehicle') exitVehicle();
+        state.player.pos.set(-305, 0, 20);
+        state.player.mesh.position.copy(state.player.pos);
+        addBotFeedMessage('🌴 انتقلت إلى ممشى شاطئ فايس سيتي (Ocean Drive)');
+      });
+
       document.getElementById('btn-teleport-airport').addEventListener('click', () => {
         soundEngine.init();
         if (state.controlMode === 'vehicle') exitVehicle();
-        state.player.pos.set(215, 0, 85);
+        state.player.pos.set(205, 0, 74);
         state.player.mesh.position.copy(state.player.pos);
         addBotFeedMessage('🛫 انتقلت إلى ساحة المطار الدولي الرئيسية');
       });
@@ -2732,9 +3213,9 @@
       document.getElementById('btn-bot-mode').addEventListener('click', () => {
         state.botBehavior = (state.botBehavior + 1) % 3;
         const labels = [
-          '🎯 سلوك البوتات: حياة طبيعية + طيران حر',
-          '🏁 سلوك البوتات: عرض جوي وسباق سريع',
-          '🔥 سلوك البوتات: مود قتال شامل وحرب جوية'
+          '🎯 سلوك العالم: حياة طبيعية + طيران حر',
+          '🏁 سلوك العالم: عرض جوي وسباق سريع',
+          '🔥 سلوك العالم: مود قتال شامل وحرب جوية'
         ];
         document.getElementById('btn-bot-mode').textContent = labels[state.botBehavior];
         addBotFeedMessage(labels[state.botBehavior]);
@@ -2748,6 +3229,11 @@
       document.getElementById('btn-board-nearest').addEventListener('click', () => {
         soundEngine.init();
         toggleBoardOrExit();
+      });
+
+      document.getElementById('btn-quick-car').addEventListener('click', () => {
+        soundEngine.init();
+        spawnAndBoardSpec('sportscar');
       });
 
       document.getElementById('btn-quick-jet').addEventListener('click', () => {
@@ -2768,7 +3254,7 @@
 
     function cycleCameraMode() {
       state.cameraMode = (state.cameraMode + 1) % 3;
-      const names = ['🎥 الكاميرا: خلفية [C]', '🎥 الكاميرا: قمرة القيادة [C]', '🎥 الكاميرا: سينمائية [C]'];
+      const names = ['🎥 الكاميرا: خلفية [C]', '🎥 الكاميرا: منظور أول [C]', '🎥 الكاميرا: سينمائية [C]'];
       document.getElementById('btn-camera-mode').textContent = names[state.cameraMode];
       const cockpitHud = document.getElementById('cockpit-hud');
       if (state.cameraMode === 1 && state.controlMode === 'vehicle') {
@@ -2781,27 +3267,33 @@
     function cycleTimeOfDay() {
       state.timeOfDay = (state.timeOfDay + 1) % 3;
       const btn = document.getElementById('btn-time-of-day');
+      skyDomeMat.map = createSkyDomeTexture(state.timeOfDay);
+      skyDomeMat.needsUpdate = true;
+
       if (state.timeOfDay === 0) {
-        scene.background.setHex(0x68a8e8);
-        scene.fog.color.setHex(0x7ab5f0);
-        sunLight.intensity = 1.25;
+        scene.background.setHex(0x38bdf8);
+        scene.fog.color.setHex(0x7dd3fc);
+        sunLight.intensity = 1.35;
         sunLight.color.setHex(0xfffbeb);
-        hemiLight.intensity = 0.78;
-        btn.textContent = '☀️ الوقت: نهار مشمس';
+        hemiLight.intensity = 0.85;
+        sunDisc.visible = true;
+        btn.textContent = '☀️ الجو: نهار ميامي المشمس';
       } else if (state.timeOfDay === 1) {
-        scene.background.setHex(0xf97316);
-        scene.fog.color.setHex(0xfb923c);
-        sunLight.intensity = 1.05;
+        scene.background.setHex(0x2e1a47);
+        scene.fog.color.setHex(0xd97757);
+        sunLight.intensity = 1.35;
         sunLight.color.setHex(0xfdba74);
-        hemiLight.intensity = 0.55;
-        btn.textContent = '🌅 الوقت: غروب ذهبي';
+        hemiLight.intensity = 0.85;
+        sunDisc.visible = true;
+        btn.textContent = '🌅 الجو: غروب GTA VI';
       } else {
-        scene.background.setHex(0x060b16);
-        scene.fog.color.setHex(0x091122);
-        sunLight.intensity = 0.28;
-        sunLight.color.setHex(0x93c5fd);
-        hemiLight.intensity = 0.32;
-        btn.textContent = '🌙 الوقت: ليل وأضواء المدينة';
+        scene.background.setHex(0x050814);
+        scene.fog.color.setHex(0x090d1e);
+        sunLight.intensity = 0.35;
+        sunLight.color.setHex(0xec4899);
+        hemiLight.intensity = 0.42;
+        sunDisc.visible = false;
+        btn.textContent = '🌙 الجو: ليل نيون فايس سيتي';
       }
     }
 
@@ -2827,11 +3319,11 @@
     let lastTime = performance.now();
     let botFeedTimer = 0;
     const botFeedTemplates = [
-      '🛡️ رادار الدفاع الجوي (SAM) يمسح المجال الجوي للمدينة والمطار',
-      '✈️ بوت [كابتن طارق] يحلق بمقاتلة F-22 فوق أبراج وسط المدينة',
-      '👮 دوريات الشرطة والجنود يتجولون في شوارع المدينة وساحة المطار',
-      '🚁 مروحية أباتشي تقوم بدورية قتالية قرب الجسر الساحلي',
-      '🔫 يمكنك التبديل بين الأسلحة بالأزرار 1-4 وإطلاق الصواريخ بزر M'
+      '🌴 غروب شمس فايس سيتي يضيء أبراج المدينة وشاطئ النخيل',
+      '🏎️ جرب ركوب سيارة Vice GT واضغط [Space] للدريفت و [Shift] للنيترو!',
+      '🖱️ اضغط كليك يمين أثناء المشي للتصويب من فوق الكتف على طريقة GTA VI',
+      '✈️ مقاتلة F-22 جاهزة للإقلاع الفوري مع صواريخ موجهة ذكية [M]',
+      '💻 اضغط زر [خطوات التعديل في VS Code] بأعلى الشاشة لنسخ التعديلات فوراً'
     ];
 
     function animate(now) {

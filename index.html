@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>AeroCity 3D — لعبة العالم المفتوح والطيران الواقعي</title>
+  <title>AeroCity 3D — لعبة العالم المفتوح، الطيران والأسلحة والدفاع الجوي</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -17,11 +17,11 @@
     #game-container { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
     #webgl-canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
     .glass-panel {
-      background: rgba(10, 17, 30, 0.78);
+      background: rgba(10, 17, 30, 0.8);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.65);
     }
     .cockpit-overlay {
       pointer-events: none;
@@ -36,7 +36,12 @@
       50% { transform: scale(1.06); opacity: 1; }
       100% { transform: scale(0.95); opacity: 0.9; }
     }
+    @keyframes danger-flash {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.98); }
+    }
     .interact-pulse { animation: pulse-ring 1.5s infinite ease-in-out; }
+    .sam-alert { animation: danger-flash 0.55s infinite ease-in-out; }
   </style>
 </head>
 <body>
@@ -44,12 +49,31 @@
     <!-- Three.js 3D Viewport -->
     <canvas id="webgl-canvas"></canvas>
 
+    <!-- Center Aiming Crosshair & Target Lock Reticle -->
+    <div id="aim-crosshair" class="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
+      <div class="relative w-12 h-12 flex items-center justify-center">
+        <div class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#4ade80]"></div>
+        <div class="absolute inset-0 border border-emerald-400/50 rounded-full"></div>
+        <div class="absolute w-3 h-0.5 bg-emerald-400/70 -left-2"></div>
+        <div class="absolute w-3 h-0.5 bg-emerald-400/70 -right-2"></div>
+        <div class="absolute h-3 w-0.5 bg-emerald-400/70 -top-2"></div>
+        <div class="absolute h-3 w-0.5 bg-emerald-400/70 -bottom-2"></div>
+      </div>
+    </div>
+
+    <!-- SAM Air Defense Missile Warning Banner -->
+    <div id="sam-warning-banner" class="hidden pointer-events-none absolute top-20 left-1/2 -translate-x-1/2 z-20 sam-alert">
+      <div class="px-5 py-2 rounded-xl bg-rose-950/90 border-2 border-rose-500 text-rose-200 font-black text-xs md:text-sm shadow-2xl flex items-center gap-2">
+        <span>⚠️</span>
+        <span id="sam-warning-text">تحذير: صاروخ دفاع جوي (SAM) يتتبعك! اضغط [X] لإطلاق الشعلات الحرارية!</span>
+      </div>
+    </div>
+
     <!-- Cockpit 1st-Person Frame & Attitude HUD -->
     <div id="cockpit-hud" class="hidden absolute inset-0 cockpit-overlay z-10 flex flex-col justify-between p-6">
-      <!-- Cockpit Frame Pillars -->
       <div class="w-full flex justify-between items-start">
         <div class="glass-panel px-3 py-1.5 rounded-lg border-emerald-500/40 text-xs hud-green mono">
-          SYS: ONLINE | AUTOTRIM: ACTIVE | RADAR: 360°
+          SYS: GTA-FLIGHT ASSIST | WEAPONS: ARMED | RADAR: 360°
         </div>
         <div class="glass-panel px-4 py-1.5 rounded-lg border-emerald-500/40 text-sm font-bold hud-green mono" id="cockpit-compass">
           HDG 090° E
@@ -59,7 +83,6 @@
         </div>
       </div>
 
-      <!-- Center Artificial Horizon & Pitch Ladder -->
       <div class="relative mx-auto my-auto w-72 h-72 flex items-center justify-center">
         <svg viewBox="0 0 200 200" class="w-full h-full opacity-85">
           <circle cx="100" cy="100" r="85" fill="none" stroke="#4ade80" stroke-width="1" stroke-dasharray="4 4"/>
@@ -71,13 +94,11 @@
             <line x1="65" y1="125" x2="85" y2="125" stroke="#4ade80" stroke-width="1.2"/>
             <line x1="115" y1="125" x2="135" y2="125" stroke="#4ade80" stroke-width="1.2"/>
           </g>
-          <!-- Center Aircraft Reticle -->
           <path d="M 88 100 L 96 100 L 100 105 L 104 100 L 112 100" fill="none" stroke="#38bdf8" stroke-width="2.5"/>
           <circle cx="100" cy="100" r="2.5" fill="#38bdf8"/>
         </svg>
       </div>
 
-      <!-- Bottom Cockpit Instrument Dashboard -->
       <div class="mx-auto max-w-2xl w-full glass-panel rounded-t-2xl border-t-2 border-sky-400/40 p-3 grid grid-cols-4 gap-3 text-center">
         <div class="bg-slate-950/80 rounded-lg p-2 border border-slate-700">
           <div class="text-[10px] text-slate-400">السرعة الجوية (IAS)</div>
@@ -100,7 +121,7 @@
 
     <!-- Top Navigation & Status Bar -->
     <div class="absolute top-3 inset-x-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-      <!-- Game Brand + Current Mode -->
+      <!-- Game Brand + Current Mode + Health & Score -->
       <div class="glass-panel rounded-xl px-3.5 py-2 flex items-center gap-3 pointer-events-auto">
         <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-sky-500 to-blue-700 flex items-center justify-center shadow-lg shadow-sky-500/30">
           <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -113,8 +134,14 @@
             <span id="mode-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
               وضع المشي الحر
             </span>
+            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 mono">
+              ❤️ <span id="hud-health">100</span>%
+            </span>
+            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 mono">
+              🎯 <span id="hud-kills">0</span>
+            </span>
           </div>
-          <p id="current-vehicle-label" class="text-xs text-slate-300">الشخصية: طيار ومستكشف المدينة</p>
+          <p id="current-vehicle-label" class="text-xs text-slate-300">الشخصية: مقاتل وطيار المدينة (مسلح)</p>
         </div>
       </div>
 
@@ -147,12 +174,12 @@
       </div>
     </div>
 
-    <!-- Right Panel: Live Telemetry & AI Bots Ecosystem -->
-    <div class="absolute top-20 right-3 z-20 w-64 md:w-72 flex flex-col gap-2.5 pointer-events-none">
+    <!-- Right Panel: Live Telemetry, Weapons Arsenal & AI/SAM Combat Ecosystem -->
+    <div class="absolute top-20 right-3 z-20 w-64 md:w-76 flex flex-col gap-2 pointer-events-none">
       <!-- Flight / Vehicle Telemetry Card -->
       <div class="glass-panel rounded-xl p-3 pointer-events-auto">
         <div class="flex items-center justify-between border-b border-slate-700/70 pb-1.5 mb-2">
-          <span class="text-xs font-bold text-sky-400">📊 عدادات القياس الحية</span>
+          <span class="text-xs font-bold text-sky-400">📊 عدادات القياس (تحكم GTA)</span>
           <span id="telemetry-status" class="text-[11px] font-bold text-emerald-400">جاهز</span>
         </div>
 
@@ -167,8 +194,8 @@
           </div>
         </div>
 
-        <!-- Throttle Bar (Visible in Vehicle/Aircraft) -->
-        <div class="mt-2.5">
+        <!-- Throttle Bar -->
+        <div class="mt-2">
           <div class="flex justify-between text-[11px] mb-1">
             <span class="text-slate-300">قوة الدفع / المحرك (Throttle)</span>
             <span id="hud-throttle-pct" class="font-bold text-amber-400 mono">0%</span>
@@ -179,7 +206,7 @@
         </div>
 
         <!-- Aircraft Specific Sub-systems -->
-        <div id="aircraft-systems-row" class="hidden mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between gap-1 text-[11px]">
+        <div id="aircraft-systems-row" class="hidden mt-2 pt-2 border-t border-slate-800 flex items-center justify-between gap-1 text-[11px]">
           <button id="btn-toggle-gear" class="flex-1 py-1 px-2 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold transition">
             🛞 العجلات: نازلة [G]
           </button>
@@ -189,35 +216,72 @@
         </div>
       </div>
 
-      <!-- AI Bots Activity & Controls -->
+      <!-- Weapons & Arsenal Card -->
       <div class="glass-panel rounded-xl p-3 pointer-events-auto">
         <div class="flex items-center justify-between mb-1.5">
-          <span class="text-xs font-bold text-amber-300">🤖 نظام البوتات الذكية (AI Bots)</span>
-          <span id="bot-count-badge" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">34 نشط</span>
+          <span class="text-xs font-bold text-rose-400">🔫 ترسانة الأسلحة والذخيرة</span>
+          <span id="active-weapon-label" class="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">رشاش هجومي M4</span>
         </div>
-        <div class="grid grid-cols-3 gap-1 text-center text-[10px] mb-2">
+        <div class="grid grid-cols-4 gap-1 text-[10px] mb-2">
+          <button id="btn-wpn-1" class="py-1.5 px-1 rounded-lg bg-rose-500/30 border border-rose-400 text-white font-bold transition">
+            [1] M4 رشاش
+          </button>
+          <button id="btn-wpn-2" class="py-1.5 px-1 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-300 hover:bg-slate-800 font-bold transition">
+            [2] قناصة
+          </button>
+          <button id="btn-wpn-3" class="py-1.5 px-1 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-300 hover:bg-slate-800 font-bold transition">
+            [3] بازوكا RPG
+          </button>
+          <button id="btn-wpn-4" class="py-1.5 px-1 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-300 hover:bg-slate-800 font-bold transition">
+            [4] ليزر/مدفع
+          </button>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button id="btn-fire-weapon" class="flex-1 py-1.5 px-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-black transition shadow">
+            🔥 إطلاق نار [Z / كليك]
+          </button>
+          <button id="btn-fire-missile" class="flex-1 py-1.5 px-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black transition shadow">
+            🚀 صاروخ موجه [M]
+          </button>
+        </div>
+      </div>
+
+      <!-- AI Bots & Air Defense Systems Card -->
+      <div class="glass-panel rounded-xl p-3 pointer-events-auto">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-bold text-amber-300">🤖 البوتات والدفاع الجوي (SAM)</span>
+          <span id="bot-count-badge" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">40 نشط</span>
+        </div>
+        <div class="grid grid-cols-4 gap-1 text-center text-[10px] mb-2">
           <div class="bg-slate-900/70 rounded p-1 border border-slate-800">
             <div class="text-sky-300 font-bold" id="bot-planes-count">8</div>
-            <div class="text-slate-400">طائرات بوت</div>
+            <div class="text-slate-400">طائرات</div>
           </div>
           <div class="bg-slate-900/70 rounded p-1 border border-slate-800">
             <div class="text-emerald-300 font-bold" id="bot-cars-count">12</div>
-            <div class="text-slate-400">سيارات بوت</div>
+            <div class="text-slate-400">سيارات</div>
           </div>
           <div class="bg-slate-900/70 rounded p-1 border border-slate-800">
             <div class="text-purple-300 font-bold" id="bot-peds-count">14</div>
-            <div class="text-slate-400">مشاة بالمدينة</div>
+            <div class="text-slate-400">شخصيات</div>
+          </div>
+          <div class="bg-slate-900/70 rounded p-1 border border-slate-800">
+            <div class="text-rose-400 font-bold" id="sam-sites-count">6</div>
+            <div class="text-slate-400">دفاع SAM</div>
           </div>
         </div>
-        <div class="flex items-center gap-1 mb-2">
+        <div class="flex flex-col gap-1 mb-2">
           <button id="btn-bot-mode" class="w-full py-1 px-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-[11px] font-bold text-amber-200 transition">
             🎯 سلوك البوتات: حياة طبيعية + طيران حر
           </button>
+          <button id="btn-toggle-sam" class="w-full py-1 px-2 rounded-lg bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/40 text-[11px] font-bold text-rose-200 transition">
+            🛡️ منظومة الدفاع الجوي (SAM): نشطة وتطلق صواريخ
+          </button>
         </div>
-        <div id="bot-live-feed" class="text-[11px] text-slate-300 bg-slate-950/70 rounded-lg p-2 border border-slate-800/90 space-y-1 max-h-24 overflow-y-auto custom-scroll">
-          <div>✈️ بوت [كابتن طارق] يقلع بطائرة F-22 من المدرج 1</div>
-          <div>🚗 بوت [سارة] تقود سيارة رياضية في شارع الكورنيش</div>
-          <div>🚁 مروحية الإنقاذ تحلق فوق أبراج وسط المدينة</div>
+        <div id="bot-live-feed" class="text-[11px] text-slate-300 bg-slate-950/70 rounded-lg p-2 border border-slate-800/90 space-y-1 max-h-20 overflow-y-auto custom-scroll">
+          <div>🛡️ 6 بطاريات دفاع جوي (SAM) تراقب المجال الجوي</div>
+          <div>✈️ بوت [كابتن طارق] يقلع بمقاتلة F-22 من المدرج</div>
+          <div>👮 شخصيات متنوعة (طيارين، شرطة، جنود، مدنيين) تتجول بالمدينة</div>
         </div>
       </div>
     </div>
@@ -225,12 +289,12 @@
     <!-- Left Panel: Radar Minimap -->
     <div class="absolute bottom-4 left-4 z-20 flex flex-col items-center gap-1.5 pointer-events-auto">
       <div class="glass-panel rounded-2xl p-2 border border-sky-500/30 relative">
-        <canvas id="radar-canvas" width="150" height="150" class="rounded-xl bg-slate-950 block"></canvas>
-        <div class="mt-1 flex items-center justify-between text-[10px] px-1 text-slate-400">
-          <span>🟢 أنت</span>
-          <span>🔵 طائرات</span>
-          <span>🟡 سيارات</span>
-          <span>🟣 مشاة</span>
+        <canvas id="radar-canvas" width="155" height="155" class="rounded-xl bg-slate-950 block"></canvas>
+        <div class="mt-1 flex items-center justify-between text-[9px] px-1 text-slate-300 gap-1">
+          <span>🟢أنت</span>
+          <span>🔵طائرات</span>
+          <span>🔴دفاعSAM</span>
+          <span>🟣شخصيات</span>
         </div>
       </div>
     </div>
@@ -243,9 +307,9 @@
       </button>
     </div>
 
-    <!-- Bottom Center On-Screen Flight/Walk Touch & Mouse Assist Controls -->
+    <!-- Bottom Center Quick Bar -->
     <div class="absolute bottom-3 right-3 md:right-1/2 md:translate-x-1/2 z-20 flex items-center gap-2 pointer-events-auto">
-      <div class="glass-panel rounded-xl px-3 py-1.5 flex items-center gap-2 text-xs">
+      <div class="glass-panel rounded-xl px-3 py-1.5 flex flex-wrap items-center gap-1.5 text-xs">
         <button id="btn-board-nearest" class="px-3 py-1.5 rounded-lg bg-emerald-500/25 hover:bg-emerald-500/40 border border-emerald-400/50 text-emerald-200 font-bold transition">
           🔑 ركوب / نزول [F]
         </button>
@@ -269,7 +333,7 @@
             <h2 class="text-lg font-black text-white flex items-center gap-2">
               <span>✈️</span><span>أسطول الطائرات والمركبات المتاحة في العالم المفتوح</span>
             </h2>
-            <p class="text-xs text-slate-300 mt-0.5">يمكنك المشي إليها في المطار والمدينة لركوبها بزر [F]، أو الضغط على أي مركبة هنا لركوبها وتجربتها فوراً!</p>
+            <p class="text-xs text-slate-300 mt-0.5">جميع الطائرات مجهزة الآن بنظام طيران سلس على طريقة GTA ومدافع رشاشة وصواريخ موجهة!</p>
           </div>
           <button id="btn-close-fleet" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold">✕</button>
         </div>
@@ -280,42 +344,37 @@
       </div>
     </div>
 
-    <!-- Modal: Keyboard & Flight Controls Guide -->
+    <!-- Modal: Keyboard & GTA Flight Controls Guide -->
     <div id="modal-controls" class="hidden fixed inset-0 z-30 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4">
       <div class="glass-panel rounded-2xl max-w-xl w-full p-5 border border-sky-400/30">
         <div class="flex items-center justify-between border-b border-slate-700 pb-3 mb-4">
-          <h2 class="text-lg font-black text-white">⌨️ دليل التحكم الكامل (PC والمتصفح)</h2>
+          <h2 class="text-lg font-black text-white">⌨️ دليل التحكم الكامل (طيران GTA + الأسلحة والقتال)</h2>
           <button id="btn-close-controls" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold">✕</button>
         </div>
 
         <div class="space-y-3 text-xs">
           <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-            <div class="font-bold text-emerald-400 mb-1.5">🚶 أثناء المشي بالشخصية على الأقدام:</div>
+            <div class="font-bold text-emerald-400 mb-1.5">🚶 المشي والأسلحة الشخصية:</div>
             <div class="grid grid-cols-2 gap-1.5 text-slate-200">
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">W A S D</span> أو الأسهم: المشي والتحرك</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">Shift</span>: الجري السريع</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">Space</span>: القفز</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">F</span> أو <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">E</span>: ركوب أقرب طائرة أو سيارة</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">W A S D</span>: التحرك والمشي</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">Shift / Space</span>: الجري / القفز</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">1 / 2 / 3 / 4</span>: تبديل السلاح (M4، قناصة، RPG، ليزر)</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">Z</span> أو <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">كليك يسار</span>: إطلاق النار</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">M</span>: إطلاق صاروخ موجه / قذيفة</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">F</span> أو <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">E</span>: ركوب / نزول من الطائرة أو السيارة</div>
             </div>
           </div>
 
           <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-            <div class="font-bold text-sky-400 mb-1.5">✈️ أثناء قيادة الطائرات والمروحيات:</div>
+            <div class="font-bold text-sky-400 mb-1.5">✈️ نظام طيران GTA السلس + القتال الجوي:</div>
             <div class="grid grid-cols-2 gap-1.5 text-slate-200">
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">W / S</span>: زيادة / خفض قوة المحرك (Throttle)</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">سهم لأسفل / لأعلى</span>: رفع أنف الطائرة للإقلاع / الهبوط</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">A / D</span> أو <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">سهم يمين/يسار</span>: الميلان والانعطاف الجوي</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">Q / E</span>: توجيه الدفة أفقياً (Yaw)</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">G</span>: طي / إنزال عجلات الهبوط</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-indigo-300">C</span>: تبديل الكاميرا (خلفية / قمرة القيادة الداخلية / سينمائية)</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">X</span>: إطلاق شعلات حرارية (Flares)</div>
-              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">F</span>: النزول من الطائرة أو السيارة</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">W / S</span>: زيادة السرعة والإقلاع / تهدئة المحرك</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">A / D</span>: انعطاف سلس يميناً ويساراً (أرضاً وجواً)</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">سهم لأسفل / لأعلى</span>: رفع أنف الطائرة للصعود / الهبوط (مع توازن تلقائي)</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">سهم يمين / يسار</span>: ميلان الأجنحة (Roll) مع اعتدال تلقائي</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">Z</span> و <span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">M</span>: رشاش الطائرة / إطلاق صاروخ موجه لتدمير الأهداف</div>
+              <div><span class="mono bg-slate-800 px-1.5 py-0.5 rounded text-rose-300">X</span>: شعلات حرارية لتضليل صواريخ الدفاع الجوي (SAM)</div>
             </div>
-          </div>
-
-          <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-            <div class="font-bold text-amber-400 mb-1">🖱️ التحكم بالماوس:</div>
-            <p class="text-slate-300">اسحب بالماوس على الشاشة لتدوير الكاميرا بزاوية 360 درجة حول شخصيتك أو طائرتك، واستخدم بكرة الماوس للتقريب والتبعيد (Zoom).</p>
           </div>
         </div>
       </div>
@@ -324,39 +383,57 @@
 
   <script>
     // =========================================================================
-    // AEROCITY 3D — OPEN WORLD FLIGHT, CITY & AI BOTS ENGINE
+    // AEROCITY 3D v2.0 — GTA FLIGHT, WEAPONS, STYLIZED CHARACTERS & SAM DEFENSE
     // =========================================================================
+
+    const WEAPON_CATALOG = [
+      { id: 1, name: 'رشاش هجومي M4', fireRate: 0.11, speed: 195, color: 0xfef08a, explosive: false, damage: 25 },
+      { id: 2, name: 'قناصة تكتيكية AWP', fireRate: 0.45, speed: 320, color: 0x38bdf8, explosive: false, damage: 85 },
+      { id: 3, name: 'قاذف صواريخ RPG-7', fireRate: 0.75, speed: 115, color: 0xf97316, explosive: true, damage: 150 },
+      { id: 4, name: 'مدفع بلازما خارق', fireRate: 0.18, speed: 240, color: 0xa855f7, explosive: true, damage: 95 }
+    ];
+
+    // Stylized Character Archetypes for Varied, Natural & Cartoon/Stylized Bots
+    const CHARACTER_ARCHETYPES = [
+      { role: 'طيار مقاتل', skin: 0xf1c27d, shirt: 0x365314, pants: 0x1a2e05, hair: 0x1e293b, hat: 'helmet', glasses: true },
+      { role: 'ضابط شرطة', skin: 0xe0ac69, shirt: 0x1e3a8a, pants: 0x0f172a, hair: 0x27272a, hat: 'police', glasses: true },
+      { role: 'جندي كوماندوز', skin: 0xc68642, shirt: 0x3f6212, pants: 0x27272a, hair: 0x18181b, hat: 'beret', glasses: false },
+      { role: 'شاب كاجوال', skin: 0xffdbac, shirt: 0xef4444, pants: 0x1e40af, hair: 0x78350f, hat: 'cap', glasses: false },
+      { role: 'رجل أعمال', skin: 0xf1c27d, shirt: 0x1e293b, pants: 0x090d16, hair: 0x451a03, hat: 'none', glasses: true },
+      { role: 'مهندس مطار', skin: 0xe0ac69, shirt: 0xeab308, pants: 0x1e293b, hair: 0x111827, hat: 'cap', glasses: false },
+      { role: 'مغامر كرتوني', skin: 0xffdbac, shirt: 0x8b5cf6, pants: 0x312e81, hair: 0xf59e0b, hat: 'afro', glasses: true }
+    ];
 
     const FLEET_CATALOG = [
       {
         id: 'cessna',
         name: 'سيسنا سكاي هوك 172',
-        subtitle: 'طائرة تدريب وجولات جوية مروحية',
+        subtitle: 'طائرة تدريب وجولات جوية مروحية (تحكم GTA سلس)',
         category: 'aircraft',
         type: 'propeller',
         maxSpeed: 260,
-        takeoffSpeed: 85,
-        accel: 38,
-        turnRate: 1.5,
-        pitchRate: 1.35,
+        takeoffSpeed: 70,
+        accel: 55,
+        turnRate: 1.8,
+        pitchRate: 1.5,
         color: 0x38bdf8,
         accent: 0xf8fafc,
-        desc: 'مثالية للإقلاع السهل من المدرج والتحليق الهادئ بين أبراج المدينة.'
+        desc: 'توازن تلقائي للأجنحة وإقلاع سريع ومزودة برشاش أمامي.'
       },
       {
         id: 'f22',
         name: 'إف-22 رابتور (F-22 Raptor)',
-        subtitle: 'مقاتلة حربية نفاثة فائقة السرعة',
+        subtitle: 'مقاتلة سيادة جوية + صواريخ موجهة + شعلات',
         category: 'aircraft',
         type: 'jet',
         maxSpeed: 680,
-        takeoffSpeed: 130,
-        accel: 95,
-        turnRate: 2.2,
-        pitchRate: 1.95,
+        takeoffSpeed: 105,
+        accel: 115,
+        turnRate: 2.35,
+        pitchRate: 2.0,
         color: 0x475569,
         accent: 0x0ea5e9,
-        desc: 'مزودة بمحركين نفاثين وحارق لاحق (Afterburner) ومناورات حادة وشعلات حرارية.'
+        desc: 'مقاتلة نفاثة مسلحة بمدفع رشاش وصواريخ جو-جو وجو-أرض لتدمير الدفاعات الجوية.'
       },
       {
         id: 'b747',
@@ -365,43 +442,43 @@
         category: 'aircraft',
         type: 'airliner',
         maxSpeed: 460,
-        takeoffSpeed: 145,
-        accel: 46,
-        turnRate: 0.85,
-        pitchRate: 0.9,
+        takeoffSpeed: 120,
+        accel: 65,
+        turnRate: 1.25,
+        pitchRate: 1.15,
         color: 0xf8fafc,
         accent: 0x2563eb,
-        desc: 'طائرة ركاب ضخمة بطابقين و4 محركات توربينية وفيزياء وزن ثقيلة وواقعية.'
+        desc: 'طائرة ركاب عملاقة بطابقين مع استقرار تلقائي سلس في الجو.'
       },
       {
         id: 'apache',
-        name: 'مروحية أباتشي / هليكوبتر',
-        subtitle: 'إقلاع وهبوط عمودي (VTOL) وتحليق حر',
+        name: 'مروحية أباتشي الهجومية (AH-64)',
+        subtitle: 'مروحية قتالية مسلحة بصواريخ ومدفع رشاش',
         category: 'aircraft',
         type: 'helicopter',
-        maxSpeed: 290,
+        maxSpeed: 295,
         takeoffSpeed: 0,
-        accel: 55,
-        turnRate: 2.0,
-        pitchRate: 1.4,
+        accel: 70,
+        turnRate: 2.2,
+        pitchRate: 1.5,
         color: 0x10b981,
         accent: 0x064e3b,
-        desc: 'تقلع عمودياً من أي مكان ويمكنك الهبوط بها فوق أسطح ناطحات السحاب!'
+        desc: 'إقلاع عمودي سلس وتحكم GTA مريح مع صواريخ هيلفاير لتدمير بطاريات SAM.'
       },
       {
         id: 'stunt',
         name: 'طائرة استعراض بهلوانية (Biplane)',
-        subtitle: 'طائرة بجناحين مزدوجين ودخان ملون',
+        subtitle: 'طائرة بجناحين مزدوجين ودخان ملون ورشاش',
         category: 'aircraft',
         type: 'stunt',
         maxSpeed: 340,
-        takeoffSpeed: 75,
-        accel: 62,
+        takeoffSpeed: 65,
+        accel: 75,
         turnRate: 2.6,
-        pitchRate: 2.4,
+        pitchRate: 2.3,
         color: 0xef4444,
         accent: 0xfacc15,
-        desc: 'خفيفة ورشيقة جداً للحركات البهلوانية والدوران اللولبي مع دخان استعراضي.'
+        desc: 'رشيقة جداً للمناورات بين ناطحات السحاب وتفادي الصواريخ.'
       },
       {
         id: 'vtol',
@@ -409,67 +486,73 @@
         subtitle: 'طائرة عسكرية بمراوح مزدوجة قابلة للإمالة',
         category: 'aircraft',
         type: 'vtol',
-        maxSpeed: 410,
-        takeoffSpeed: 40,
-        accel: 68,
-        turnRate: 1.75,
-        pitchRate: 1.5,
+        maxSpeed: 420,
+        takeoffSpeed: 55,
+        accel: 82,
+        turnRate: 1.95,
+        pitchRate: 1.65,
         color: 0x6366f1,
         accent: 0xe2e8f0,
-        desc: 'تجمع بين الإقلاع السريع والسرعة العالية في الطيران الأفقي.'
+        desc: 'تجمع بين الإقلاع السريع والقوة النارية العالية.'
       },
       {
         id: 'sportscar',
-        name: 'سيارة سوبر سبورت GT',
-        subtitle: 'سيارة رياضية سريعة للتجول في شوارع المدينة',
+        name: 'سيارة سوبر سبورت GT مسلحة',
+        subtitle: 'سيارة رياضية سريعة للتجول والمطاردة في المدينة',
         category: 'car',
         type: 'car',
-        maxSpeed: 220,
+        maxSpeed: 230,
         takeoffSpeed: 9999,
-        accel: 65,
-        turnRate: 2.3,
+        accel: 75,
+        turnRate: 2.4,
         pitchRate: 0,
         color: 0xf43f5e,
         accent: 0x1e293b,
-        desc: 'قدها من وسط المدينة عبر الجسر السريع للوصول إلى المطار وركوب طائرتك.'
+        desc: 'انطلق بها في شوارع المدينة وأطلق النار أثناء القيادة.'
       },
       {
         id: 'policecar',
-        name: 'سيارة دورية الشرطة',
+        name: 'سيارة دورية الشرطة التكتيكية',
         subtitle: 'مركبة أمن المطار والمدينة بأضواء طوارئ',
         category: 'car',
         type: 'car',
-        maxSpeed: 200,
+        maxSpeed: 210,
         takeoffSpeed: 9999,
-        accel: 58,
-        turnRate: 2.1,
+        accel: 68,
+        turnRate: 2.25,
         pitchRate: 0,
         color: 0x1e293b,
         accent: 0x3b82f6,
-        desc: 'مزودة بسارينة ضوئية للتجول السريع في شوارع المدينة والمطار.'
+        desc: 'مزودة بسارينة ضوئية ومدفع أمامي للمطاردات.'
       }
     ];
 
-    // Game State
     const state = {
       controlMode: 'walk', // 'walk' | 'vehicle'
       activeVehicle: null,
       nearestVehicle: null,
-      cameraMode: 0, // 0: Chase 3rd Person, 1: Cockpit 1st Person, 2: Cinematic Orbit
-      timeOfDay: 0, // 0: Day, 1: Sunset, 2: Night
-      botBehavior: 0, // 0: Normal Living City, 1: Airshow & Race, 2: Action Pursuit
+      cameraMode: 0,
+      timeOfDay: 0,
+      botBehavior: 0, // 0: Normal + Free Flight, 1: Airshow & Race, 2: Full Combat War Mode
+      samActive: true,
       soundEnabled: true,
       smokeEnabled: false,
+      currentWeaponIndex: 0,
+      lastFireTime: 0,
+      health: 100,
+      kills: 0,
       keys: {},
       camYaw: -Math.PI * 0.5,
-      camPitch: 0.25,
+      camPitch: 0.22,
       camDistance: 14,
       isDragging: false,
+      mouseDownTime: 0,
       lastMouseX: 0,
       lastMouseY: 0,
       player: {
         mesh: null,
-        pos: new THREE.Vector3(210, 0, 85), // Starts at Airport Terminal Plaza near planes & cars
+        weaponMesh: null,
+        pos: new THREE.Vector3(210, 0, 85),
         vel: new THREE.Vector3(),
         yaw: -Math.PI * 0.5,
         walkCycle: 0,
@@ -479,19 +562,21 @@
       aiPlanes: [],
       aiCars: [],
       aiPeds: [],
+      samSites: [],
+      projectiles: [],
       particles: [],
-      flares: [],
       buildingColliders: []
     };
 
-    // Web Audio Synthesizer for Realistic Engine, Rotor, Jet, Car & Footstep Sounds
+    // =========================================================================
+    // WEB AUDIO SYNTHESIZER (ENGINES, GUNSHOTS, MISSILES, EXPLOSIONS, SAM LOCK)
+    // =========================================================================
     class SoundEngine {
       constructor() {
         this.ctx = null;
         this.osc1 = null;
         this.osc2 = null;
         this.gainNode = null;
-        this.noiseGain = null;
         this.initialized = false;
       }
 
@@ -541,13 +626,13 @@
 
           this.osc1.frequency.setTargetAtTime(baseFreq, this.ctx.currentTime, 0.05);
           this.osc2.frequency.setTargetAtTime(baseFreq * 1.5, this.ctx.currentTime, 0.05);
-          this.gainNode.gain.setTargetAtTime(0.045 + thr * 0.06, this.ctx.currentTime, 0.08);
+          this.gainNode.gain.setTargetAtTime(0.04 + thr * 0.055, this.ctx.currentTime, 0.08);
         } else {
           this.gainNode.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.08);
         }
       }
 
-      playBeep(freq = 520, duration = 0.09) {
+      playBeep(freq = 520, duration = 0.09, wave = 'sine', vol = 0.07) {
         if (!state.soundEnabled) return;
         this.init();
         if (!this.ctx) return;
@@ -555,20 +640,26 @@
           const osc = this.ctx.createOscillator();
           const g = this.ctx.createGain();
           osc.frequency.value = freq;
-          osc.type = 'sine';
-          g.gain.value = 0.07;
+          osc.type = wave;
+          g.gain.setValueAtTime(vol, this.ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
           osc.connect(g);
           g.connect(this.ctx.destination);
           osc.start();
           osc.stop(this.ctx.currentTime + duration);
         } catch (e) {}
       }
+
+      playExplosion() {
+        this.playBeep(75, 0.38, 'sawtooth', 0.14);
+        setTimeout(() => this.playBeep(48, 0.35, 'triangle', 0.12), 50);
+      }
     }
 
     const soundEngine = new SoundEngine();
 
     // =========================================================================
-    // PROCEDURAL HIGH-DETAIL CANVAS TEXTURES (NO EXTERNAL FILES REQUIRED)
+    // PROCEDURAL TEXTURES
     // =========================================================================
     function createBuildingTexture(seedColor) {
       const c = document.createElement('canvas');
@@ -577,15 +668,10 @@
       const ctx = c.getContext('2d');
       ctx.fillStyle = seedColor || '#1e293b';
       ctx.fillRect(0, 0, 256, 512);
-
       for (let y = 12; y < 500; y += 22) {
         for (let x = 12; x < 244; x += 28) {
           const lit = Math.random() > 0.32;
-          if (lit) {
-            ctx.fillStyle = Math.random() > 0.25 ? '#bae6fd' : '#fde68a';
-          } else {
-            ctx.fillStyle = '#0f172a';
-          }
+          ctx.fillStyle = lit ? (Math.random() > 0.25 ? '#bae6fd' : '#fde68a') : '#0f172a';
           ctx.fillRect(x, y, 18, 13);
         }
       }
@@ -602,24 +688,17 @@
       const ctx = c.getContext('2d');
       ctx.fillStyle = '#1e242b';
       ctx.fillRect(0, 0, 256, 1024);
-
-      // Side lines
       ctx.fillStyle = '#e2e8f0';
       ctx.fillRect(10, 0, 6, 1024);
       ctx.fillRect(240, 0, 6, 1024);
-
-      // Dashed center line
       for (let y = 20; y < 1000; y += 60) {
         ctx.fillRect(124, y, 8, 34);
       }
-
-      // Threshold piano keys
       for (let x = 28; x < 228; x += 20) {
         ctx.fillRect(x, 25, 12, 55);
         ctx.fillRect(x, 940, 12, 55);
       }
-      const tex = new THREE.CanvasTexture(c);
-      return tex;
+      return new THREE.CanvasTexture(c);
     }
 
     function createRoadTexture() {
@@ -643,59 +722,216 @@
     }
 
     // =========================================================================
-    // 3D MODEL BUILDERS (HUMAN CHARACTER, 6 AIRCRAFT TYPES, CARS, CITY, AIRPORT)
+    // UPGRADED STYLIZED / NATURAL CHARACTERS & WEAPON MESHES
     // =========================================================================
-    function createHumanMesh(shirtColor = 0x0284c7, isPlayer = false) {
+    function createGunMesh(weaponType = 1) {
+      const gunGroup = new THREE.Group();
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8, roughness: 0.25 });
+      const accentMat = new THREE.MeshStandardMaterial({
+        color: weaponType === 3 ? 0x15803d : (weaponType === 4 ? 0x9333ea : 0x475569),
+        metalness: 0.5,
+        roughness: 0.4
+      });
+
+      const barrelLen = weaponType === 2 ? 1.35 : (weaponType === 3 ? 1.25 : 0.95);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, barrelLen), metalMat);
+      body.position.set(0, 0, 0.35);
+      gunGroup.add(body);
+
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.35), accentMat);
+      stock.position.set(0, -0.06, -0.1);
+      gunGroup.add(stock);
+
+      if (weaponType === 3) {
+        // RPG Warhead cone at front
+        const warhead = new THREE.Mesh(
+          new THREE.ConeGeometry(0.16, 0.42, 8),
+          new THREE.MeshStandardMaterial({ color: 0xd97706 })
+        );
+        warhead.rotation.x = Math.PI * 0.5;
+        warhead.position.set(0, 0, 1.05);
+        gunGroup.add(warhead);
+      }
+      return gunGroup;
+    }
+
+    function createHumanMesh(archetypeInput = null, isPlayer = false) {
       const group = new THREE.Group();
+      const arch = archetypeInput || (isPlayer ? CHARACTER_ARCHETYPES[0] : CHARACTER_ARCHETYPES[Math.floor(Math.random() * CHARACTER_ARCHETYPES.length)]);
 
-      const skinMat = new THREE.MeshStandardMaterial({ color: 0xf1c27d, roughness: 0.6 });
-      const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.5 });
-      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
-      const visorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.2 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: arch.skin, roughness: 0.5 });
+      const shirtMat = new THREE.MeshStandardMaterial({ color: isPlayer ? 0x0284c7 : arch.shirt, roughness: 0.45 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: arch.pants, roughness: 0.65 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3, metalness: 0.6 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: arch.hair, roughness: 0.7 });
+      const shoeMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5 });
+      const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-      // Torso
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.05, 0.42), shirtMat);
-      torso.position.y = 1.45;
+      // Rounded Torso & Jacket Collar
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.31, 1.02, 12), shirtMat);
+      torso.position.y = 1.46;
+      torso.scale.set(1.15, 1, 0.78);
       torso.castShadow = true;
       group.add(torso);
 
-      // Head + Pilot Helmet/Hair
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMat);
-      head.position.y = 2.28;
-      head.castShadow = true;
-      group.add(head);
+      // Belt & Tactical Vest Detail
+      const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 12), darkMat);
+      belt.position.y = 0.98;
+      belt.scale.set(1.16, 1, 0.8);
+      group.add(belt);
 
-      if (isPlayer) {
-        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.12), visorMat);
-        visor.position.set(0, 2.3, 0.24);
-        group.add(visor);
+      // Neck
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.22, 10), skinMat);
+      neck.position.y = 2.04;
+      group.add(neck);
+
+      // Smooth Stylized Spherical Head
+      const headGroup = new THREE.Group();
+      headGroup.position.y = 2.34;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.31, 16, 16), skinMat);
+      head.scale.set(0.95, 1.06, 0.95);
+      head.castShadow = true;
+      headGroup.add(head);
+
+      // Facial Features: Eyes, Pupils, Smile/Mouth
+      [-0.1, 0.1].forEach(ex => {
+        const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.048, 8, 8), whiteMat);
+        eyeWhite.position.set(ex, 0.04, 0.26);
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), darkMat);
+        pupil.position.set(ex, 0.04, 0.295);
+        headGroup.add(eyeWhite, pupil);
+      });
+
+      // Sunglasses or Pilot Visor
+      if (arch.glasses || isPlayer) {
+        const glasses = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.1), darkMat);
+        glasses.position.set(0, 0.05, 0.27);
+        headGroup.add(glasses);
       }
 
-      // Limbs for walking animation
-      const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.9, 0.28), pantsMat);
-      leftLeg.position.set(-0.2, 0.45, 0);
-      leftLeg.castShadow = true;
-      group.add(leftLeg);
+      // Hats / Hairstyles for distinct personality
+      if (arch.hat === 'helmet' || isPlayer) {
+        const helmet = new THREE.Mesh(
+          new THREE.SphereGeometry(0.34, 14, 14, 0, Math.PI * 2, 0, Math.PI * 0.65),
+          new THREE.MeshStandardMaterial({ color: isPlayer ? 0x0ea5e9 : 0x3f6212, metalness: 0.5, roughness: 0.3 })
+        );
+        helmet.position.y = 0.03;
+        headGroup.add(helmet);
+      } else if (arch.hat === 'cap' || arch.hat === 'police') {
+        const capCrown = new THREE.Mesh(
+          new THREE.SphereGeometry(0.32, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
+          new THREE.MeshStandardMaterial({ color: arch.hat === 'police' ? 0x1e3a8a : 0xef4444 })
+        );
+        capCrown.position.y = 0.05;
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.04, 0.26), darkMat);
+        visor.position.set(0, 0.12, 0.28);
+        headGroup.add(capCrown, visor);
+      } else if (arch.hat === 'afro') {
+        const afro = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 14), hairMat);
+        afro.position.set(0, 0.14, -0.04);
+        headGroup.add(afro);
+      } else {
+        const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
+        hairTop.position.y = 0.05;
+        headGroup.add(hairTop);
+      }
 
-      const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.9, 0.28), pantsMat);
-      rightLeg.position.set(0.2, 0.45, 0);
-      rightLeg.castShadow = true;
-      group.add(rightLeg);
+      group.add(headGroup);
 
-      const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.85, 0.24), shirtMat);
-      leftArm.position.set(-0.52, 1.45, 0);
-      leftArm.castShadow = true;
-      group.add(leftArm);
+      // Articulated Limbs with Rounded Joints, Hands & Shoes
+      function makeLeg(xOffset) {
+        const legPivot = new THREE.Group();
+        legPivot.position.set(xOffset, 0.95, 0);
+        const legCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.82, 10), pantsMat);
+        legCyl.position.y = -0.41;
+        legCyl.castShadow = true;
+        const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.38), shoeMat);
+        shoe.position.set(0, -0.84, 0.06);
+        legPivot.add(legCyl, shoe);
+        return legPivot;
+      }
 
-      const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.85, 0.24), shirtMat);
-      rightArm.position.set(0.52, 1.45, 0);
-      rightArm.castShadow = true;
-      group.add(rightArm);
+      function makeArm(xOffset, withWeapon = false) {
+        const armPivot = new THREE.Group();
+        armPivot.position.set(xOffset, 1.85, 0);
+        const armCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.72, 10), shirtMat);
+        armCyl.position.y = -0.34;
+        armCyl.castShadow = true;
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), skinMat);
+        hand.position.y = -0.72;
+        armPivot.add(armCyl, hand);
 
-      group.userData.limbs = { leftLeg, rightLeg, leftArm, rightArm };
+        if (withWeapon) {
+          const wpn = createGunMesh(1);
+          wpn.position.set(0, -0.7, 0.2);
+          armPivot.add(wpn);
+          armPivot.rotation.x = -0.55; // Hold weapon ready forward
+          group.userData.weaponSocket = hand;
+          group.userData.weaponMesh = wpn;
+        }
+        return armPivot;
+      }
+
+      const leftLeg = makeLeg(-0.19);
+      const rightLeg = makeLeg(0.19);
+      const leftArm = makeArm(-0.48, false);
+      const rightArm = makeArm(0.48, isPlayer || arch.role === 'جندي كوماندوز' || arch.role === 'ضابط شرطة');
+
+      group.add(leftLeg, rightLeg, leftArm, rightArm);
+      group.userData.limbs = { leftLeg, rightLeg, leftArm, rightArm, headGroup };
+      group.userData.archetype = arch;
       return group;
     }
 
+    // =========================================================================
+    // 3D SAM AIR DEFENSE LAUNCHER BATTERY BUILDER
+    // =========================================================================
+    function createSAMBatteryMesh() {
+      const group = new THREE.Group();
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7, metalness: 0.3 });
+      const oliveMat = new THREE.MeshStandardMaterial({ color: 0x365314, roughness: 0.5, metalness: 0.4 });
+      const missileMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 });
+      const tipMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+
+      // Concrete Bunker Pedestal
+      const bunker = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.8, 1.8, 10), baseMat);
+      bunker.position.y = 0.9;
+      bunker.castShadow = true;
+      group.add(bunker);
+
+      // Rotating Turret Head
+      const turret = new THREE.Group();
+      turret.position.y = 2.2;
+
+      const turretCore = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.6, 2.4), oliveMat);
+      turret.add(turretCore);
+
+      // Quad SAM Missile Launcher Tubes
+      [-1.4, 1.4].forEach(tx => {
+        const pod = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.1, 3.6), oliveMat);
+        pod.position.set(tx, 0.5, 0.2);
+        pod.rotation.x = -0.45; // Angled skyward
+        turret.add(pod);
+
+        const nose = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.7, 8), tipMat);
+        nose.rotation.x = Math.PI * 0.5 - 0.45;
+        nose.position.set(tx, 1.3, 1.9);
+        turret.add(nose);
+      });
+
+      // Tracking Radar Dish on top of SAM turret
+      const dish = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 0.25), missileMat);
+      dish.position.set(0, 1.5, -0.6);
+      turret.add(dish);
+
+      group.add(turret);
+      group.userData = { turret, dish };
+      return group;
+    }
+
+    // =========================================================================
+    // 6 AIRCRAFT & 2 CARS 3D MODELS
+    // =========================================================================
     function createAircraftMesh(spec) {
       const root = new THREE.Group();
       const bodyMat = new THREE.MeshStandardMaterial({ color: spec.color, metalness: 0.45, roughness: 0.35 });
@@ -709,7 +945,6 @@
       const gearGroup = new THREE.Group();
 
       if (spec.type === 'jet') {
-        // F-22 Raptor Stealth Fighter
         const fuselage = new THREE.Mesh(new THREE.ConeGeometry(1.15, 11.5, 6), bodyMat);
         fuselage.rotation.x = Math.PI * 0.5;
         fuselage.scale.set(1.2, 1, 0.48);
@@ -721,24 +956,25 @@
         canopy.position.set(0, 2.05, 1.2);
         root.add(canopy);
 
-        // Delta Wings
         const mainWing = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.14, 3.8), bodyMat);
         mainWing.position.set(0, 1.55, -0.6);
         mainWing.castShadow = true;
         root.add(mainWing);
 
-        const wingTips = new THREE.Mesh(new THREE.BoxGeometry(10.1, 0.16, 0.8), accentMat);
-        wingTips.position.set(0, 1.56, -1.5);
-        root.add(wingTips);
+        // Under-wing Missiles
+        [-3.2, 3.2].forEach(mx => {
+          const msl = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.9, 8), new THREE.MeshBasicMaterial({ color: 0xf8fafc }));
+          msl.rotation.x = Math.PI * 0.5;
+          msl.position.set(mx, 1.35, -0.4);
+          root.add(msl);
+        });
 
-        // Twin Angled Tail Fins
         [-1.1, 1.1].forEach(xOffset => {
           const fin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.8, 2.0), accentMat);
           fin.position.set(xOffset, 2.35, -4.1);
           fin.rotation.z = xOffset > 0 ? -0.25 : 0.25;
           root.add(fin);
 
-          // Twin Jet Nozzles + Afterburner Glow
           const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.44, 1.1, 12), darkMat);
           nozzle.rotation.x = Math.PI * 0.5;
           nozzle.position.set(xOffset * 0.5, 1.55, -5.4);
@@ -753,7 +989,6 @@
         });
 
       } else if (spec.type === 'airliner') {
-        // Boeing 747 Jumbo Airliner
         const tube = new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.55, 15.5, 16), bodyMat);
         tube.rotation.x = Math.PI * 0.5;
         tube.position.y = 2.4;
@@ -773,7 +1008,6 @@
         cockpitGlass.position.set(0, 3.55, 6.4);
         root.add(cockpitGlass);
 
-        // Swept Commercial Wings + 4 Turbofan Engines
         const wings = new THREE.Mesh(new THREE.BoxGeometry(18.5, 0.24, 3.2), accentMat);
         wings.position.set(0, 2.0, 0.5);
         wings.castShadow = true;
@@ -795,7 +1029,6 @@
         root.add(hTail);
 
       } else if (spec.type === 'helicopter') {
-        // Helicopter (Apache / Bell style)
         const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.75, 1.65, 4.4), bodyMat);
         cabin.position.set(0, 1.75, 0.6);
         cabin.castShadow = true;
@@ -806,6 +1039,11 @@
         noseGlass.scale.set(0.85, 0.85, 1.3);
         root.add(noseGlass);
 
+        // Stub Wings with Rocket Pods
+        const stubWing = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.18, 0.9), accentMat);
+        stubWing.position.set(0, 1.55, 0.6);
+        root.add(stubWing);
+
         const tailBoom = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 5.4), accentMat);
         tailBoom.position.set(0, 1.9, -3.8);
         root.add(tailBoom);
@@ -814,31 +1052,28 @@
         tailFin.position.set(0, 2.5, -6.2);
         root.add(tailFin);
 
-        // Landing Skids
         [-0.95, 0.95].forEach(sx => {
           const skid = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 4.2), darkMat);
           skid.position.set(sx, 0.2, 0.5);
           gearGroup.add(skid);
         });
 
-        // Main Rotor + Tail Rotor
         const mainRotorGroup = new THREE.Group();
         mainRotorGroup.position.set(0, 2.8, 0.4);
-        const blade1 = new THREE.Mesh(new THREE.BoxGeometry(9.8, 0.06, 0.36), darkMat);
-        const blade2 = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.06, 9.8), darkMat);
-        mainRotorGroup.add(blade1, blade2);
+        mainRotorGroup.add(
+          new THREE.Mesh(new THREE.BoxGeometry(9.8, 0.06, 0.36), darkMat),
+          new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.06, 9.8), darkMat)
+        );
         root.add(mainRotorGroup);
         rotors.push({ mesh: mainRotorGroup, axis: 'y', speed: 24 });
 
         const tailRotorGroup = new THREE.Group();
         tailRotorGroup.position.set(0.22, 2.6, -6.2);
-        const tBlade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.8, 0.22), accentMat);
-        tailRotorGroup.add(tBlade);
+        tailRotorGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.8, 0.22), accentMat));
         root.add(tailRotorGroup);
         rotors.push({ mesh: tailRotorGroup, axis: 'x', speed: 30 });
 
       } else if (spec.type === 'vtol') {
-        // V-22 Osprey Tiltrotor
         const hull = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.7, 7.6), bodyMat);
         hull.position.set(0, 1.75, 0);
         hull.castShadow = true;
@@ -868,7 +1103,6 @@
         });
 
       } else {
-        // Propeller Cessna 172 OR Aerobatic Biplane
         const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.25, 6.8), bodyMat);
         body.position.set(0, 1.5, 0);
         body.castShadow = true;
@@ -878,7 +1112,6 @@
         cabinGlass.position.set(0, 2.15, 0.7);
         root.add(cabinGlass);
 
-        // Main Wing
         const wingY = spec.type === 'stunt' ? 2.45 : 2.52;
         const wing1 = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.14, 1.65), accentMat);
         wing1.position.set(0, wingY, 0.6);
@@ -899,7 +1132,6 @@
         tailH.position.set(0, 1.65, -2.9);
         root.add(tailH);
 
-        // Front Spinning Propeller
         const propGroup = new THREE.Group();
         propGroup.position.set(0, 1.5, 3.55);
         propGroup.add(
@@ -910,7 +1142,6 @@
         rotors.push({ mesh: propGroup, axis: 'z', speed: 32 });
       }
 
-      // Standard Retractable Landing Gear Wheels (for non-helicopters)
       if (spec.type !== 'helicopter') {
         const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.26, 12);
         wheelGeo.rotateZ(Math.PI * 0.5);
@@ -923,13 +1154,6 @@
         gearGroup.add(noseWheel, leftWheel, rightWheel);
       }
       root.add(gearGroup);
-
-      // Wingtip Navigation Strobe Lights
-      const redLight = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
-      redLight.position.set(-4.7, 1.8, 0);
-      const greenLight = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), new THREE.MeshBasicMaterial({ color: 0x22ff44 }));
-      greenLight.position.set(4.7, 1.8, 0);
-      root.add(redLight, greenLight);
 
       root.userData = { rotors, afterburners, gearGroup };
       return root;
@@ -950,7 +1174,6 @@
       cabin.position.set(0, 1.25, -0.2);
       root.add(cabin);
 
-      // Headlights & Taillights
       const hlMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
       const tlMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
       [-0.7, 0.7].forEach(lx => {
@@ -982,7 +1205,7 @@
     }
 
     // =========================================================================
-    // THREE.JS SCENE, WORLD GENERATION & LIVING ECOSYSTEM
+    // THREE.JS SCENE & WORLD GENERATION
     // =========================================================================
     const canvas = document.getElementById('webgl-canvas');
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -993,11 +1216,10 @@
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x68a8e8);
-    scene.fog = new THREE.FogExp2(0x7ab5f0, 0.00075);
+    scene.fog = new THREE.FogExp2(0x7ab5f0, 0.00072);
 
     const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.2, 2600);
 
-    // Lighting
     const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 0.78);
     scene.add(hemiLight);
 
@@ -1006,8 +1228,6 @@
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.near = 10;
-    sunLight.shadow.camera.far = 950;
     const d = 320;
     sunLight.shadow.camera.left = -d;
     sunLight.shadow.camera.right = d;
@@ -1015,40 +1235,38 @@
     sunLight.shadow.camera.bottom = -d;
     scene.add(sunLight);
 
-    // World Terrain & Ocean
-    const oceanGeo = new THREE.PlaneGeometry(4500, 4500);
-    const oceanMat = new THREE.MeshStandardMaterial({ color: 0x0369a1, roughness: 0.25, metalness: 0.4 });
-    const ocean = new THREE.Mesh(oceanGeo, oceanMat);
+    const ocean = new THREE.Mesh(
+      new THREE.PlaneGeometry(4500, 4500),
+      new THREE.MeshStandardMaterial({ color: 0x0369a1, roughness: 0.25, metalness: 0.4 })
+    );
     ocean.rotation.x = -Math.PI * 0.5;
     ocean.position.y = -1.2;
     scene.add(ocean);
 
-    const landGeo = new THREE.PlaneGeometry(1700, 1700);
-    const landMat = new THREE.MeshStandardMaterial({ color: 0x2d4a3e, roughness: 0.9 });
-    const land = new THREE.Mesh(landGeo, landMat);
+    const land = new THREE.Mesh(
+      new THREE.PlaneGeometry(1700, 1700),
+      new THREE.MeshStandardMaterial({ color: 0x2d4a3e, roughness: 0.9 })
+    );
     land.rotation.x = -Math.PI * 0.5;
     land.receiveShadow = true;
     scene.add(land);
 
     let radarDish = null;
-    let helipadTowerTop = new THREE.Vector3(-60, 74, -60);
+    let helipadTowerTop = new THREE.Vector3(-96, 74, -96);
 
     function buildOpenWorldCityAndAirport() {
       const roadTex = createRoadTexture();
       const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.85 });
       const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.8 });
 
-      // City Grid Roads (-360 to +120 in X, -320 to +320 in Z)
       const gridCoords = [-300, -180, -60, 60];
       gridCoords.forEach(coord => {
-        // North-South Avenue
         const nsRoad = new THREE.Mesh(new THREE.PlaneGeometry(18, 760), roadMat);
         nsRoad.rotation.x = -Math.PI * 0.5;
         nsRoad.position.set(coord, 0.05, 0);
         nsRoad.receiveShadow = true;
         scene.add(nsRoad);
 
-        // East-West Avenue
         const ewRoad = new THREE.Mesh(new THREE.PlaneGeometry(660, 18), roadMat);
         ewRoad.rotation.x = -Math.PI * 0.5;
         ewRoad.position.set(-100, 0.06, coord);
@@ -1056,31 +1274,26 @@
         scene.add(ewRoad);
       });
 
-      // Highway connecting Downtown to the Airport
       const airportHighway = new THREE.Mesh(new THREE.PlaneGeometry(240, 20), roadMat);
       airportHighway.rotation.x = -Math.PI * 0.5;
       airportHighway.position.set(150, 0.07, 60);
       airportHighway.receiveShadow = true;
       scene.add(airportHighway);
 
-      // Generate Realistic Skyscrapers & City Blocks
       const buildingPalettes = ['#1e293b', '#0f172a', '#1e3a5f', '#27272a', '#334155'];
       const bTextures = buildingPalettes.map(c => createBuildingTexture(c));
 
       const blockCenters = [-240, -120, 0];
       blockCenters.forEach((bx, bi) => {
         blockCenters.forEach((bz, bj) => {
-          // Concrete block plaza
           const plaza = new THREE.Mesh(new THREE.BoxGeometry(92, 0.25, 92), sidewalkMat);
           plaza.position.set(bx, 0.12, bz);
           plaza.receiveShadow = true;
           scene.add(plaza);
 
-          // 4 Buildings per City Block
           [[-24, -24], [24, -24], [-24, 24], [24, 24]].forEach(([ox, oz], idx) => {
             const x = bx + ox;
             const z = bz + oz;
-            const isHeroTower = (bx === -60 + 60 && bz === -60 + 60 && idx === 0);
             const w = 26 + (idx % 2) * 6;
             const d = 26 + ((idx + 1) % 2) * 6;
             const h = (bi === 1 && bj === 1 && idx === 0) ? 74 : (22 + ((bi * 17 + bj * 31 + idx * 19) % 48));
@@ -1098,7 +1311,6 @@
 
             state.buildingColliders.push({ x, z, halfW: w * 0.5 + 1.2, halfD: d * 0.5 + 1.2, height: h });
 
-            // Add Helipad on the tallest Central Tower (-96, 74, -96)
             if (bi === 1 && bj === 1 && idx === 0) {
               helipadTowerTop.set(x, h + 0.3, z);
               const pad = new THREE.Mesh(
@@ -1120,9 +1332,7 @@
         });
       });
 
-      // =====================================================================
-      // INTERNATIONAL AIRPORT COMPLEX (East Side X: 180 to 460)
-      // =====================================================================
+      // Airport Apron & Runways
       const apron = new THREE.Mesh(
         new THREE.PlaneGeometry(310, 680),
         new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85 })
@@ -1132,7 +1342,6 @@
       apron.receiveShadow = true;
       scene.add(apron);
 
-      // Two Full Runways with Markings
       const rwyTex = createRunwayTexture();
       const rwyMat = new THREE.MeshStandardMaterial({ map: rwyTex, roughness: 0.75 });
 
@@ -1143,7 +1352,6 @@
         rwy.receiveShadow = true;
         scene.add(rwy);
 
-        // Runway Approach Edge Lights
         for (let rz = -300; rz <= 300; rz += 40) {
           const l1 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 6, 6), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
           l1.position.set(rx - 20, 0.4, rz);
@@ -1153,7 +1361,6 @@
         }
       });
 
-      // Airport Terminal Building & Control Tower
       const terminal = new THREE.Mesh(
         new THREE.BoxGeometry(36, 16, 130),
         new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.5, roughness: 0.3 })
@@ -1163,7 +1370,6 @@
       scene.add(terminal);
       state.buildingColliders.push({ x: 190, z: -20, halfW: 19, halfD: 66, height: 16 });
 
-      // Control Tower
       const towerShaft = new THREE.Mesh(
         new THREE.CylinderGeometry(4.5, 6, 58, 12),
         new THREE.MeshStandardMaterial({ color: 0xe2e8f0 })
@@ -1186,7 +1392,6 @@
       radarDish.position.set(195, 67.5, -110);
       scene.add(radarDish);
 
-      // Aircraft Hangars
       [-185, -235].forEach(hz => {
         const hangar = new THREE.Mesh(
           new THREE.BoxGeometry(34, 14, 34),
@@ -1199,7 +1404,7 @@
     }
 
     // =========================================================================
-    // SPAWN PARKED WORLD AIRCRAFT, CARS & AI BOTS
+    // SPAWN WORLD VEHICLES, VARIED CHARACTER BOTS & SAM DEFENSE BATTERIES
     // =========================================================================
     function createWorldVehicleInstance(spec, x, y, z, yaw = 0) {
       const mesh = spec.category === 'car' ? createCarMesh(spec) : createAircraftMesh(spec);
@@ -1224,24 +1429,22 @@
     }
 
     function populateWorldVehiclesAndBots() {
-      // 1. Player Character
-      state.player.mesh = createHumanMesh(0x0284c7, true);
+      // 1. Player Character with 3D Weapon in hand
+      state.player.mesh = createHumanMesh(CHARACTER_ARCHETYPES[0], true);
       state.player.mesh.position.copy(state.player.pos);
       scene.add(state.player.mesh);
 
-      // 2. Spawn All 6 Aircraft & 2 Cars at the Airport & Helipad ready to board!
+      // 2. Spawn Parked Aircraft & Cars
       const spawns = [
         { id: 'cessna', x: 255, y: 0, z: 95, yaw: 0 },
-        { id: 'f22', x: 330, y: 0, z: 140, yaw: Math.PI }, // Ready on Runway 1
-        { id: 'b747', x: 415, y: 0, z: 180, yaw: Math.PI }, // Ready on Runway 2
+        { id: 'f22', x: 330, y: 0, z: 140, yaw: Math.PI },
+        { id: 'b747', x: 415, y: 0, z: 180, yaw: Math.PI },
         { id: 'apache', x: 245, y: 0, z: 50, yaw: -Math.PI * 0.5 },
         { id: 'stunt', x: 255, y: 0, z: 5, yaw: 0 },
         { id: 'vtol', x: 255, y: 0, z: -40, yaw: 0 },
         { id: 'sportscar', x: 215, y: 0, z: 68, yaw: -Math.PI * 0.5 },
         { id: 'policecar', x: 215, y: 0, z: 105, yaw: -Math.PI * 0.5 },
-        // Extra Helicopter on the Downtown Skyscraper Helipad!
         { id: 'apache', x: helipadTowerTop.x, y: helipadTowerTop.y, z: helipadTowerTop.z, yaw: 0 },
-        // Extra Sports Car in Downtown
         { id: 'sportscar', x: -60, y: 0, z: -30, yaw: 0 }
       ];
 
@@ -1250,7 +1453,31 @@
         if (spec) createWorldVehicleInstance(spec, s.x, s.y, s.z, s.yaw);
       });
 
-      // 3. Spawn 8 AI Bot Aircraft (Flying in the sky + Taking off/Landing loops)
+      // 3. Spawn 6 Surface-to-Air Missile (SAM) Defense Batteries
+      const samCoords = [
+        { name: 'بطارية دفاع المطار الشمالي', x: 280, y: 0, z: -260 },
+        { name: 'بطارية دفاع المطار الجنوبي', x: 280, y: 0, z: 260 },
+        { name: 'بطارية دفاع الجسر الساحلي', x: 110, y: 0, z: -130 },
+        { name: 'بطارية دفاع وسط المدينة', x: -180, y: 0, z: 120 },
+        { name: 'بطارية القاعدة العسكرية', x: 235, y: 0, z: -150 },
+        { name: 'بطارية الميناء الغربي', x: -310, y: 0, z: -180 }
+      ];
+
+      samCoords.forEach(sc => {
+        const samMesh = createSAMBatteryMesh();
+        samMesh.position.set(sc.x, sc.y, sc.z);
+        scene.add(samMesh);
+        state.samSites.push({
+          name: sc.name,
+          mesh: samMesh,
+          pos: samMesh.position,
+          cooldown: 3 + Math.random() * 4,
+          alive: true,
+          respawnTimer: 0
+        });
+      });
+
+      // 4. Spawn 8 AI Bot Aircraft
       const botPilotNames = [
         'كابتن طارق', 'طيار نادر', 'رائد سيف', 'كابتن ليلى',
         'صقر الجو 1', 'كابتن كريم', 'ملازم رامي', 'نسر المدينة'
@@ -1275,11 +1502,12 @@
           baseAlt: alt,
           speed: 0.22 + (idx % 3) * 0.08,
           centerX: idx % 2 === 0 ? -60 : 180,
-          centerZ: 0
+          centerZ: 0,
+          fireTimer: 4 + Math.random() * 4
         });
       });
 
-      // 4. Spawn 12 AI Traffic Cars driving along City Roads
+      // 5. Spawn 12 AI Traffic Cars
       const carColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xec4899];
       const avenues = [-300, -180, -60, 60];
       for (let i = 0; i < 12; i++) {
@@ -1301,29 +1529,239 @@
         state.aiCars.push({ mesh, axis, roadCoord, dir, speed: 24 + (i % 4) * 5 });
       }
 
-      // 5. Spawn 14 AI Pedestrian Bots walking around the Airport & City Sidewalks
-      const shirtPalette = [0xef4444, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xec4899, 0x14b8a6, 0x3b82f6];
+      // 6. Spawn 14 Varied Stylized Character Bots (Police, Soldiers, Pilots, Civilians)
       for (let i = 0; i < 14; i++) {
-        const pedMesh = createHumanMesh(shirtPalette[i % shirtPalette.length], false);
+        const arch = CHARACTER_ARCHETYPES[i % CHARACTER_ARCHETYPES.length];
+        const pedMesh = createHumanMesh(arch, false);
         const inAirport = i < 6;
-        const px = inAirport ? (208 + (i % 3) * 10) : (-170 + (i * 35) % 220);
-        const pz = inAirport ? (40 + i * 14) : (-150 + (i * 45) % 260);
+        const px = inAirport ? (206 + (i % 3) * 11) : (-170 + (i * 35) % 220);
+        const pz = inAirport ? (42 + i * 13) : (-150 + (i * 45) % 260);
         pedMesh.position.set(px, 0, pz);
         scene.add(pedMesh);
 
         state.aiPeds.push({
           mesh: pedMesh,
+          archetype: arch,
           originX: px,
           originZ: pz,
           yaw: Math.random() * Math.PI * 2,
           timer: Math.random() * 4,
-          walkPhase: Math.random() * 10
+          walkPhase: Math.random() * 10,
+          fireCooldown: 2 + Math.random() * 3
         });
       }
     }
 
     // =========================================================================
-    // BOARDING / EXITING VEHICLES & SPAWNING
+    // WEAPONS, MISSILES, SAM INTERCEPTORS & EXPLOSIONS
+    // =========================================================================
+    function selectWeapon(index) {
+      state.currentWeaponIndex = THREE.MathUtils.clamp(index, 0, WEAPON_CATALOG.length - 1);
+      const w = WEAPON_CATALOG[state.currentWeaponIndex];
+      document.getElementById('active-weapon-label').textContent = w.name;
+
+      // Update UI buttons highlight
+      [1, 2, 3, 4].forEach((num, idx) => {
+        const btn = document.getElementById(`btn-wpn-${num}`);
+        if (!btn) return;
+        if (idx === state.currentWeaponIndex) {
+          btn.className = 'py-1.5 px-1 rounded-lg bg-rose-500/35 border border-rose-400 text-white font-bold transition';
+        } else {
+          btn.className = 'py-1.5 px-1 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-300 hover:bg-slate-800 font-bold transition';
+        }
+      });
+
+      // Replace 3D gun mesh on player's right arm
+      const limbs = state.player.mesh?.userData?.limbs;
+      if (limbs && limbs.rightArm) {
+        const oldWpn = state.player.mesh.userData.weaponMesh;
+        if (oldWpn) limbs.rightArm.remove(oldWpn);
+        const newWpn = createGunMesh(w.id);
+        newWpn.position.set(0, -0.7, 0.2);
+        limbs.rightArm.add(newWpn);
+        state.player.mesh.userData.weaponMesh = newWpn;
+      }
+      soundEngine.playBeep(680, 0.06);
+    }
+
+    function firePrimaryWeapon() {
+      const now = performance.now() / 1000;
+      const wpn = WEAPON_CATALOG[state.currentWeaponIndex];
+      const fireDelay = state.controlMode === 'vehicle' ? 0.09 : wpn.fireRate;
+      if (now - state.lastFireTime < fireDelay) return;
+      state.lastFireTime = now;
+
+      let origin = new THREE.Vector3();
+      let dir = new THREE.Vector3();
+      let isExplosive = wpn.explosive;
+      let projSpeed = wpn.speed;
+      let colorHex = wpn.color;
+
+      if (state.controlMode === 'vehicle' && state.activeVehicle) {
+        const v = state.activeVehicle;
+        dir.set(
+          Math.sin(v.yaw) * Math.cos(v.pitch),
+          Math.sin(v.pitch),
+          Math.cos(v.yaw) * Math.cos(v.pitch)
+        ).normalize();
+        origin.copy(v.pos).add(new THREE.Vector3(0, 1.7, 0)).addScaledVector(dir, 4.8);
+        projSpeed = 280;
+        colorHex = 0xfef08a;
+        soundEngine.playBeep(260, 0.05, 'sawtooth', 0.08);
+      } else {
+        // Shoot toward camera look direction
+        camera.getWorldDirection(dir);
+        dir.y = Math.max(-0.25, dir.y);
+        dir.normalize();
+        state.player.yaw = Math.atan2(dir.x, dir.z);
+        origin.copy(state.player.pos).add(new THREE.Vector3(0, 1.65, 0)).addScaledVector(dir, 1.4);
+        soundEngine.playBeep(wpn.id === 3 ? 140 : 380, 0.07, 'sawtooth', 0.09);
+      }
+
+      spawnProjectile({
+        pos: origin,
+        vel: dir.multiplyScalar(projSpeed),
+        color: colorHex,
+        radius: isExplosive ? 0.35 : 0.18,
+        explosive: isExplosive,
+        homingTarget: null,
+        fromPlayer: true,
+        life: 2.8
+      });
+    }
+
+    function fireGuidedMissile() {
+      soundEngine.playBeep(520, 0.14, 'sawtooth', 0.11);
+      let origin = new THREE.Vector3();
+      let dir = new THREE.Vector3();
+
+      if (state.controlMode === 'vehicle' && state.activeVehicle) {
+        const v = state.activeVehicle;
+        dir.set(
+          Math.sin(v.yaw) * Math.cos(v.pitch),
+          Math.sin(v.pitch),
+          Math.cos(v.yaw) * Math.cos(v.pitch)
+        ).normalize();
+        origin.copy(v.pos).add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(dir, 5.2);
+      } else {
+        camera.getWorldDirection(dir);
+        dir.normalize();
+        origin.copy(state.player.pos).add(new THREE.Vector3(0, 1.8, 0)).addScaledVector(dir, 1.6);
+      }
+
+      // Find nearest target (Active SAM site or AI Aircraft/Car)
+      let bestTarget = null;
+      let bestDist = 480;
+
+      state.samSites.forEach(sam => {
+        if (!sam.alive) return;
+        const d = sam.pos.distanceTo(origin);
+        if (d < bestDist) {
+          bestDist = d;
+          bestTarget = sam.pos;
+        }
+      });
+
+      state.aiPlanes.forEach(bot => {
+        const d = bot.mesh.position.distanceTo(origin);
+        if (d < bestDist) {
+          bestDist = d;
+          bestTarget = bot.mesh.position;
+        }
+      });
+
+      spawnProjectile({
+        pos: origin,
+        vel: dir.multiplyScalar(145),
+        color: 0xf97316,
+        radius: 0.42,
+        explosive: true,
+        homingTarget: bestTarget,
+        fromPlayer: true,
+        isMissile: true,
+        life: 5.5
+      });
+
+      addBotFeedMessage('🚀 تم إطلاق صاروخ موجه نحو الهدف!');
+    }
+
+    function spawnProjectile(opts) {
+      const geo = opts.isMissile
+        ? new THREE.CylinderGeometry(0.16, 0.22, 1.8, 8)
+        : new THREE.SphereGeometry(opts.radius || 0.22, 8, 8);
+      if (opts.isMissile) geo.rotateX(Math.PI * 0.5);
+
+      const mat = new THREE.MeshBasicMaterial({ color: opts.color || 0xfef08a });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(opts.pos);
+      scene.add(mesh);
+
+      state.projectiles.push({
+        mesh,
+        pos: mesh.position,
+        vel: opts.vel.clone(),
+        explosive: !!opts.explosive,
+        isMissile: !!opts.isMissile,
+        isSAM: !!opts.isSAM,
+        homingTarget: opts.homingTarget || null,
+        fromPlayer: !!opts.fromPlayer,
+        life: opts.life || 3.0
+      });
+    }
+
+    function triggerExplosion(pos, scale = 1.0) {
+      soundEngine.playExplosion();
+      const colors = [0xfef08a, 0xf97316, 0xef4444, 0x475569];
+      for (let i = 0; i < 14; i++) {
+        const c = colors[i % colors.length];
+        const vel = new THREE.Vector3(
+          (Math.random() - 0.5) * 28 * scale,
+          Math.random() * 22 * scale,
+          (Math.random() - 0.5) * 28 * scale
+        );
+        spawnSmokeOrFlare(pos, c, (0.7 + Math.random() * 0.9) * scale, 1.1 + Math.random() * 0.6, vel);
+      }
+    }
+
+    function spawnSmokeOrFlare(pos, colorHex, size = 0.65, life = 1.4, vel = null) {
+      const mat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.85 });
+      const m = new THREE.Mesh(new THREE.SphereGeometry(size, 6, 6), mat);
+      m.position.copy(pos);
+      scene.add(m);
+      state.particles.push({
+        mesh: m,
+        life,
+        maxLife: life,
+        isFlare: colorHex === 0xfef08a,
+        vel: vel || new THREE.Vector3((Math.random() - 0.5) * 2, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 2)
+      });
+    }
+
+    function fireCountermeasureFlares() {
+      const origin = state.controlMode === 'vehicle' && state.activeVehicle
+        ? state.activeVehicle.pos.clone()
+        : state.player.pos.clone().add(new THREE.Vector3(0, 2, 0));
+
+      soundEngine.playBeep(880, 0.15);
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        const vel = new THREE.Vector3(Math.cos(angle) * 16, -3 + Math.random() * 8, Math.sin(angle) * 16);
+        spawnSmokeOrFlare(origin, i % 2 === 0 ? 0xfef08a : 0xf97316, 0.6, 2.2, vel);
+      }
+
+      // Divert any incoming SAM missiles away from the player!
+      state.projectiles.forEach(p => {
+        if (p.isSAM) {
+          p.homingTarget = null;
+          p.vel.x += (Math.random() - 0.5) * 90;
+          p.vel.z += (Math.random() - 0.5) * 90;
+        }
+      });
+      addBotFeedMessage('✨ تم إطلاق الشعلات الحرارية وتضليل الصواريخ المعادية!');
+    }
+
+    // =========================================================================
+    // BOARDING / EXITING VEHICLES
     // =========================================================================
     function boardVehicle(vehicle) {
       if (!vehicle) return;
@@ -1345,7 +1783,6 @@
       v.throttle = 0;
 
       state.controlMode = 'walk';
-      // Place player safely next to the vehicle
       const groundH = getSurfaceHeightAt(v.pos.x + 3.5, v.pos.z);
       state.player.pos.set(v.pos.x + Math.cos(v.yaw) * 4.2, Math.max(groundH, v.pos.y), v.pos.z - Math.sin(v.yaw) * 4.2);
       state.player.vel.set(0, 0, 0);
@@ -1355,9 +1792,10 @@
       state.activeVehicle = null;
       state.cameraMode = 0;
       document.getElementById('cockpit-hud').classList.add('hidden');
+      document.getElementById('sam-warning-banner').classList.add('hidden');
       soundEngine.playBeep(420, 0.1);
       updateHUDModeLabels();
-      addBotFeedMessage(`🚶 نزلت من المركبة إلى وضع المشي الحر`);
+      addBotFeedMessage('🚶 نزلت من المركبة إلى وضع المشي والقتال الحر');
     }
 
     function toggleBoardOrExit() {
@@ -1366,7 +1804,6 @@
       } else if (state.nearestVehicle) {
         boardVehicle(state.nearestVehicle);
       } else if (state.worldVehicles.length > 0) {
-        // Find closest vehicle anywhere and board it
         let closest = state.worldVehicles[0];
         let bestDist = Infinity;
         state.worldVehicles.forEach(v => {
@@ -1383,12 +1820,8 @@
     function spawnAndBoardSpec(specId) {
       const spec = FLEET_CATALOG.find(s => s.id === specId);
       if (!spec) return;
+      if (state.controlMode === 'vehicle') exitVehicle();
 
-      if (state.controlMode === 'vehicle') {
-        exitVehicle();
-      }
-
-      // Check if an existing vehicle of this type is nearby, or spawn a fresh one right in front of the player
       const spawnX = state.player.pos.x + Math.sin(state.player.yaw) * 8;
       const spawnZ = state.player.pos.z + Math.cos(state.player.yaw) * 8;
       const spawnY = getSurfaceHeightAt(spawnX, spawnZ);
@@ -1398,7 +1831,6 @@
     }
 
     function getSurfaceHeightAt(x, z) {
-      // Check if on top of the Helipad skyscraper
       for (let i = 0; i < state.buildingColliders.length; i++) {
         const b = state.buildingColliders[i];
         if (Math.abs(x - b.x) <= b.halfW && Math.abs(z - b.z) <= b.halfD) {
@@ -1409,34 +1841,8 @@
     }
 
     // =========================================================================
-    // PHYSICS & ANIMATION LOOP (WALKING, FLIGHT DYNAMICS, CARS, BOTS, PARTICLES)
+    // GTA V-STYLE INTUITIVE FLIGHT & VEHICLE PHYSICS + WALKING
     // =========================================================================
-    function spawnSmokeOrFlare(pos, colorHex, size = 0.65, life = 1.4, vel = null) {
-      const mat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.85 });
-      const m = new THREE.Mesh(new THREE.SphereGeometry(size, 6, 6), mat);
-      m.position.copy(pos);
-      scene.add(m);
-      state.particles.push({
-        mesh: m,
-        life,
-        maxLife: life,
-        vel: vel || new THREE.Vector3((Math.random() - 0.5) * 2, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 2)
-      });
-    }
-
-    function fireCountermeasureFlares() {
-      const origin = state.controlMode === 'vehicle' && state.activeVehicle
-        ? state.activeVehicle.pos.clone()
-        : state.player.pos.clone().add(new THREE.Vector3(0, 2, 0));
-
-      soundEngine.playBeep(880, 0.15);
-      for (let i = 0; i < 8; i++) {
-        const angle = (i / 8) * Math.PI * 2;
-        const vel = new THREE.Vector3(Math.cos(angle) * 14, -3 + Math.random() * 8, Math.sin(angle) * 14);
-        spawnSmokeOrFlare(origin, i % 2 === 0 ? 0xfef08a : 0xf97316, 0.55, 1.8, vel);
-      }
-    }
-
     function updatePlayerWalking(dt) {
       const p = state.player;
       const moveSpeed = (state.keys['ShiftLeft'] || state.keys['ShiftRight']) ? 22 : 12;
@@ -1465,7 +1871,6 @@
         p.walkCycle = 0;
       }
 
-      // Jump & Gravity
       const floorY = getSurfaceHeightAt(p.pos.x, p.pos.z);
       if (state.keys['Space'] && p.onGround) {
         p.vel.y = 11.5;
@@ -1483,17 +1888,17 @@
       p.mesh.position.copy(p.pos);
       p.mesh.rotation.y = p.yaw;
 
-      // Animate human limbs
       const limbs = p.mesh.userData.limbs;
       if (limbs) {
         const swing = Math.sin(p.walkCycle) * 0.65;
         limbs.leftLeg.rotation.x = swing;
         limbs.rightLeg.rotation.x = -swing;
-        limbs.leftArm.rotation.x = -swing * 0.8;
-        limbs.rightArm.rotation.x = swing * 0.8;
+        limbs.leftArm.rotation.x = -swing * 0.7;
+        limbs.rightArm.rotation.x = -0.55 + swing * 0.25;
       }
 
-      // Check nearest vehicle for interactive [F] prompt
+      if (state.keys['KeyZ']) firePrimaryWeapon();
+
       let nearest = null;
       let minDist = 14.5;
       state.worldVehicles.forEach(v => {
@@ -1521,9 +1926,9 @@
       const spec = v.spec;
 
       document.getElementById('interaction-prompt').classList.add('hidden');
+      if (state.keys['KeyZ']) firePrimaryWeapon();
 
       if (spec.category === 'car') {
-        // Car Driving Physics
         if (state.keys['KeyW'] || state.keys['ArrowUp']) {
           v.speed = Math.min(spec.maxSpeed, v.speed + spec.accel * dt * 1.4);
           v.throttle = Math.min(1, v.throttle + dt * 2);
@@ -1551,114 +1956,116 @@
         v.roll = 0;
 
       } else if (spec.type === 'helicopter') {
-        // Helicopter VTOL Physics
-        if (state.keys['KeyW']) v.throttle = Math.min(1, v.throttle + 0.65 * dt);
-        if (state.keys['KeyS']) v.throttle = Math.max(0, v.throttle - 0.65 * dt);
-
-        // Vertical Climb / Descent
-        const targetClimb = (v.throttle - 0.42) * 38;
+        // GTA V-Style Helicopter Controls:
+        // W/S: Smooth Climb/Descend, Arrows: Pitch Forward/Back & Bank Left/Right, A/D: Rotate Yaw
         const groundY = getSurfaceHeightAt(v.pos.x, v.pos.z);
-        if (v.pos.y > groundY + 0.05 || targetClimb > 0) {
-          v.verticalSpeed = THREE.MathUtils.lerp(v.verticalSpeed, targetClimb, dt * 3);
-          v.pos.y = Math.max(groundY, v.pos.y + v.verticalSpeed * dt);
+        if (state.keys['KeyW']) {
+          v.throttle = Math.min(1, v.throttle + dt * 1.2);
+          v.verticalSpeed = THREE.MathUtils.lerp(v.verticalSpeed, 22, dt * 4);
+        } else if (state.keys['KeyS']) {
+          v.throttle = Math.max(0.2, v.throttle - dt * 1.2);
+          v.verticalSpeed = THREE.MathUtils.lerp(v.verticalSpeed, -18, dt * 4);
         } else {
-          v.pos.y = groundY;
-          v.verticalSpeed = 0;
+          // Auto-hover in place like GTA V!
+          v.throttle = v.pos.y > groundY + 0.3 ? 0.55 : 0;
+          v.verticalSpeed = THREE.MathUtils.lerp(v.verticalSpeed, 0, dt * 6);
         }
 
-        // Pitch & Roll cyclic controls
+        v.pos.y = Math.max(groundY, v.pos.y + v.verticalSpeed * dt);
+
+        if (state.keys['KeyA'] || state.keys['KeyQ']) v.yaw += spec.turnRate * dt;
+        if (state.keys['KeyD'] || state.keys['KeyE']) v.yaw -= spec.turnRate * dt;
+
         let targetPitch = 0;
         let targetRoll = 0;
-        if (state.keys['ArrowUp']) targetPitch = 0.35;
-        if (state.keys['ArrowDown']) targetPitch = -0.35;
-        if (state.keys['KeyA'] || state.keys['ArrowLeft']) {
-          v.yaw += spec.turnRate * dt;
-          targetRoll = 0.38;
+        if (state.keys['ArrowUp'] || state.keys['KeyI']) targetPitch = -0.28; // Tilt nose forward to accelerate
+        if (state.keys['ArrowDown'] || state.keys['KeyK']) targetPitch = 0.25; // Tilt back to slow/reverse
+        if (state.keys['ArrowLeft'] || state.keys['KeyJ']) {
+          targetRoll = 0.35;
+          v.yaw += 0.65 * dt;
         }
-        if (state.keys['KeyD'] || state.keys['ArrowRight']) {
-          v.yaw -= spec.turnRate * dt;
-          targetRoll = -0.38;
+        if (state.keys['ArrowRight'] || state.keys['KeyL']) {
+          targetRoll = -0.35;
+          v.yaw -= 0.65 * dt;
         }
-        if (state.keys['KeyQ']) v.yaw += spec.turnRate * dt;
-        if (state.keys['KeyE']) v.yaw -= spec.turnRate * dt;
 
-        v.pitch = THREE.MathUtils.lerp(v.pitch, targetPitch, dt * 4);
-        v.roll = THREE.MathUtils.lerp(v.roll, targetRoll, dt * 4);
+        v.pitch = THREE.MathUtils.lerp(v.pitch, targetPitch, dt * 4.5);
+        v.roll = THREE.MathUtils.lerp(v.roll, targetRoll, dt * 4.5);
 
-        const forwardAccel = v.pitch * spec.accel * 2.4;
-        v.speed = THREE.MathUtils.clamp(v.speed + forwardAccel * dt, -60, spec.maxSpeed);
-        if (Math.abs(targetPitch) < 0.05) v.speed *= (1 - 0.8 * dt);
+        const targetForwardSpd = -targetPitch * spec.maxSpeed * 3.1;
+        v.speed = THREE.MathUtils.lerp(v.speed, targetForwardSpd, dt * 2.5);
 
         const moveDist = (v.speed / 3.6) * dt;
         v.pos.x += Math.sin(v.yaw) * moveDist;
         v.pos.z += Math.cos(v.yaw) * moveDist;
 
       } else {
-        // Fixed-Wing Aircraft Physics (Cessna, F-22 Jet, Boeing 747, Stunt Biplane, V-22)
-        if (state.keys['KeyW']) v.throttle = Math.min(1, v.throttle + 0.55 * dt);
-        if (state.keys['KeyS']) v.throttle = Math.max(0, v.throttle - 0.65 * dt);
+        // ===================================================================
+        // GTA V-STYLE FIXED-WING AIRCRAFT CONTROLS (WITH AUTO-STABILIZATION!)
+        // ===================================================================
+        // W / S: Throttle Up / Down
+        if (state.keys['KeyW']) v.throttle = Math.min(1, v.throttle + 0.65 * dt);
+        if (state.keys['KeyS']) v.throttle = Math.max(0, v.throttle - 0.75 * dt);
 
         const targetSpeed = v.throttle * spec.maxSpeed;
-        if (v.speed < targetSpeed) {
-          v.speed = Math.min(targetSpeed, v.speed + spec.accel * dt);
-        } else {
-          v.speed = Math.max(targetSpeed, v.speed - spec.accel * 0.45 * dt);
-        }
-
-        if (state.keys['Space']) {
-          v.speed = Math.max(0, v.speed - spec.accel * 1.4 * dt);
-        }
+        v.speed = THREE.MathUtils.lerp(v.speed, targetSpeed, dt * 1.6);
+        if (state.keys['Space']) v.speed = Math.max(0, v.speed - spec.accel * 1.5 * dt);
 
         const groundY = getSurfaceHeightAt(v.pos.x, v.pos.z);
-        const airborne = v.pos.y > groundY + 0.25;
+        const airborne = v.pos.y > groundY + 0.3;
 
-        // Pitch (ArrowDown pulls stick back to climb, ArrowUp pushes nose down)
-        if (state.keys['ArrowDown']) {
-          if (v.speed >= spec.takeoffSpeed * 0.75 || airborne) {
-            v.pitch = Math.min(0.85, v.pitch + spec.pitchRate * dt);
+        // GTA Rudder Steering (A / D or Q / E) works smoothly on runway AND in the air
+        if (state.keys['KeyA'] || state.keys['KeyQ']) {
+          v.yaw += spec.turnRate * 0.75 * dt;
+          if (airborne && !state.keys['ArrowLeft'] && !state.keys['ArrowRight']) {
+            v.roll = THREE.MathUtils.lerp(v.roll, 0.35, dt * 4);
           }
-        } else if (state.keys['ArrowUp']) {
-          v.pitch = Math.max(-0.75, v.pitch - spec.pitchRate * dt);
-        } else if (!airborne) {
-          v.pitch = THREE.MathUtils.lerp(v.pitch, 0, dt * 5);
+        } else if (state.keys['KeyD'] || state.keys['KeyE']) {
+          v.yaw -= spec.turnRate * 0.75 * dt;
+          if (airborne && !state.keys['ArrowLeft'] && !state.keys['ArrowRight']) {
+            v.roll = THREE.MathUtils.lerp(v.roll, -0.35, dt * 4);
+          }
         }
 
-        // Roll & Banking Turn
+        // Pitch: ArrowDown / K = Pull Up (Climb), ArrowUp / I = Push Nose Down
+        // Auto-Takeoff assist when throttle is high on runway!
+        let desiredPitch = 0;
+        if (state.keys['ArrowDown'] || state.keys['KeyK']) {
+          desiredPitch = 0.52;
+        } else if (state.keys['ArrowUp'] || state.keys['KeyI']) {
+          desiredPitch = -0.48;
+        } else if (!airborne && v.speed >= spec.takeoffSpeed) {
+          desiredPitch = 0.22; // Smooth GTA-style automatic takeoff liftoff!
+        } else {
+          // Smoothly auto-level pitch in the air so plane flies straight and steady!
+          desiredPitch = 0;
+        }
+        v.pitch = THREE.MathUtils.lerp(v.pitch, desiredPitch, dt * 3.8);
+
+        // Roll: ArrowLeft / ArrowRight banks the wings & turns smoothly, and auto-levels when released!
         if (airborne) {
-          if (state.keys['KeyA'] || state.keys['ArrowLeft']) {
-            v.roll = Math.min(1.25, v.roll + spec.turnRate * 1.3 * dt);
-          } else if (state.keys['KeyD'] || state.keys['ArrowRight']) {
-            v.roll = Math.max(-1.25, v.roll - spec.turnRate * 1.3 * dt);
-          } else {
-            v.roll = THREE.MathUtils.lerp(v.roll, 0, dt * 2.2);
+          if (state.keys['ArrowLeft'] || state.keys['KeyJ']) {
+            v.roll = THREE.MathUtils.lerp(v.roll, 0.85, dt * 4.2);
+          } else if (state.keys['ArrowRight'] || state.keys['KeyL']) {
+            v.roll = THREE.MathUtils.lerp(v.roll, -0.85, dt * 4.2);
+          } else if (!state.keys['KeyA'] && !state.keys['KeyD']) {
+            // Automatic wing-leveling stabilizer!
+            v.roll = THREE.MathUtils.lerp(v.roll, 0, dt * 3.5);
           }
-          // Banking naturally turns the plane's heading
-          v.yaw += v.roll * 0.85 * dt;
+          v.yaw += v.roll * 0.95 * dt;
         } else {
           v.roll = THREE.MathUtils.lerp(v.roll, 0, dt * 6);
-          if (v.speed > 3) {
-            if (state.keys['KeyA'] || state.keys['ArrowLeft']) v.yaw += 1.15 * dt;
-            if (state.keys['KeyD'] || state.keys['ArrowRight']) v.yaw -= 1.15 * dt;
-          }
         }
 
-        // Rudder Yaw (Q / E)
-        if (state.keys['KeyQ']) v.yaw += 0.9 * dt;
-        if (state.keys['KeyE']) v.yaw -= 0.9 * dt;
-
-        // Lift & Gravity calculation
         const forwardStep = (v.speed / 3.6) * dt;
-        const liftFactor = Math.min(1.2, v.speed / Math.max(40, spec.takeoffSpeed));
-
         v.pos.x += Math.sin(v.yaw) * Math.cos(v.pitch) * forwardStep;
         v.pos.z += Math.cos(v.yaw) * Math.cos(v.pitch) * forwardStep;
 
-        if (v.speed >= spec.takeoffSpeed || airborne) {
-          const climbRate = Math.sin(v.pitch) * (v.speed / 3.6) + (liftFactor - 0.85) * 4.5;
-          v.verticalSpeed = climbRate;
-          v.pos.y += climbRate * dt;
-        } else {
-          v.verticalSpeed = 0;
+        if (v.speed >= spec.takeoffSpeed * 0.85 || airborne) {
+          const lift = Math.min(1.0, v.speed / Math.max(50, spec.takeoffSpeed));
+          const sink = airborne && lift < 0.7 ? -9.5 * (1 - lift) : 0;
+          v.verticalSpeed = Math.sin(v.pitch) * (v.speed / 3.6) + sink;
+          v.pos.y += v.verticalSpeed * dt;
         }
 
         if (v.pos.y <= groundY) {
@@ -1668,14 +2075,12 @@
         }
       }
 
-      // Apply orientation to 3D Mesh (YXZ order for realistic aircraft pitch/roll/yaw)
       v.mesh.position.copy(v.pos);
       v.mesh.rotation.order = 'YXZ';
       v.mesh.rotation.y = v.yaw;
       v.mesh.rotation.x = -v.pitch;
       v.mesh.rotation.z = -v.roll;
 
-      // Spin propellers/rotors & toggle jet afterburner flames
       const ud = v.mesh.userData;
       if (ud) {
         const spinMult = Math.max(0.25, v.throttle * 1.5);
@@ -1684,35 +2089,202 @@
         });
         ud.afterburners.forEach(b => {
           b.visible = v.throttle > 0.55;
-          if (b.visible) {
-            b.scale.setScalar(0.85 + Math.random() * 0.35);
-          }
+          if (b.visible) b.scale.setScalar(0.85 + Math.random() * 0.35);
         });
       }
 
-      // Aerobatic Smoke Trail
       if ((state.smokeEnabled || spec.type === 'stunt') && v.speed > 65 && Math.random() < 0.45) {
         const tailPos = v.pos.clone().add(new THREE.Vector3(-Math.sin(v.yaw) * 4.5, 1.5, -Math.cos(v.yaw) * 4.5));
         spawnSmokeOrFlare(tailPos, 0xf8fafc, 0.55, 1.2, new THREE.Vector3(0, 0.4, 0));
       }
     }
 
-    function updateAIBots(dt) {
-      const behaviorMult = state.botBehavior === 1 ? 1.55 : (state.botBehavior === 2 ? 1.8 : 1.0);
+    // =========================================================================
+    // AI BOTS, SAM AIR DEFENSE BATTERIES & PROJECTILE COLLISIONS
+    // =========================================================================
+    function updateSAMAndProjectiles(dt) {
+      const playerTargetPos = state.controlMode === 'vehicle' && state.activeVehicle
+        ? state.activeVehicle.pos
+        : state.player.pos;
+      const playerAirborne = state.controlMode === 'vehicle' && state.activeVehicle && state.activeVehicle.pos.y > 14;
 
-      // 1. Update AI Aircraft in the Sky
+      let activeSAMLock = false;
+
+      // 1. Update SAM Defense Sites
+      let aliveSAMCount = 0;
+      state.samSites.forEach(sam => {
+        if (!sam.alive) {
+          sam.respawnTimer -= dt;
+          if (sam.respawnTimer <= 0) {
+            sam.alive = true;
+            sam.mesh.visible = true;
+          }
+          return;
+        }
+        aliveSAMCount++;
+
+        const ud = sam.mesh.userData;
+        if (ud && ud.dish) ud.dish.rotation.y += dt * 2.5;
+
+        const distToPlayer = sam.pos.distanceTo(playerTargetPos);
+        if (ud && ud.turret && distToPlayer < 460) {
+          const angleToPlayer = Math.atan2(playerTargetPos.x - sam.pos.x, playerTargetPos.z - sam.pos.z);
+          ud.turret.rotation.y = angleToPlayer;
+        }
+
+        // Fire SAM Interceptor if SAM is active and player is flying in range
+        if (state.samActive && playerAirborne && distToPlayer < 420) {
+          activeSAMLock = true;
+          sam.cooldown -= dt;
+          if (sam.cooldown <= 0) {
+            sam.cooldown = 5.5 + Math.random() * 2.5;
+            const launchOrigin = sam.pos.clone().add(new THREE.Vector3(0, 4.2, 0));
+            const dir = playerTargetPos.clone().sub(launchOrigin).normalize();
+            soundEngine.playBeep(780, 0.18, 'square', 0.09);
+            spawnProjectile({
+              pos: launchOrigin,
+              vel: dir.multiplyScalar(92),
+              color: 0xef4444,
+              radius: 0.45,
+              explosive: true,
+              isMissile: true,
+              isSAM: true,
+              homingTarget: playerTargetPos,
+              fromPlayer: false,
+              life: 6.0
+            });
+            addBotFeedMessage(`🚀 ${sam.name} أطلقت صاروخ دفاع جوي (SAM) نحوك!`);
+          }
+        }
+      });
+
+      document.getElementById('sam-sites-count').textContent = aliveSAMCount;
+
+      // Check if any SAM missile is currently flying toward player
+      const incomingSAM = state.projectiles.some(p => p.isSAM && p.homingTarget !== null);
+      const banner = document.getElementById('sam-warning-banner');
+      if (incomingSAM || (activeSAMLock && state.samActive)) {
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+
+      // 2. Update All Projectiles & Missiles
+      for (let i = state.projectiles.length - 1; i >= 0; i--) {
+        const p = state.projectiles[i];
+        p.life -= dt;
+
+        // Homing Steering
+        if (p.homingTarget) {
+          const desiredDir = p.homingTarget.clone().sub(p.pos).normalize();
+          const currentSpd = p.vel.length();
+          p.vel.lerp(desiredDir.multiplyScalar(currentSpd), dt * 3.2);
+          p.mesh.lookAt(p.pos.clone().add(p.vel));
+        }
+
+        p.pos.addScaledVector(p.vel, dt);
+
+        if (p.isMissile && Math.random() < 0.65) {
+          spawnSmokeOrFlare(p.pos, p.isSAM ? 0xfca5a5 : 0xe2e8f0, 0.35, 0.55, new THREE.Vector3(0, 0.5, 0));
+        }
+
+        let hit = false;
+
+        // Ground impact
+        if (p.pos.y <= getSurfaceHeightAt(p.pos.x, p.pos.z)) {
+          hit = true;
+        }
+
+        if (p.fromPlayer) {
+          // Check hits on SAM Batteries
+          state.samSites.forEach(sam => {
+            if (sam.alive && sam.pos.distanceTo(p.pos) < 5.5) {
+              sam.alive = false;
+              sam.respawnTimer = 18;
+              sam.mesh.visible = false;
+              hit = true;
+              state.kills++;
+              triggerExplosion(sam.pos, 1.5);
+              addBotFeedMessage(`💥 دمرت ${sam.name}! (+1 هدف)`);
+            }
+          });
+
+          // Check hits on AI Planes
+          state.aiPlanes.forEach(bot => {
+            if (bot.mesh.position.distanceTo(p.pos) < 6.5) {
+              hit = true;
+              state.kills++;
+              triggerExplosion(bot.mesh.position.clone(), 1.4);
+              bot.angle += Math.PI; // Respawn on opposite side of air loop
+              addBotFeedMessage(`🎯 أسقطت طائرة البوت [${bot.name}]!`);
+            }
+          });
+
+          // Check hits on AI Cars
+          state.aiCars.forEach(car => {
+            if (car.mesh.position.distanceTo(p.pos) < 3.8) {
+              hit = true;
+              state.kills++;
+              triggerExplosion(car.mesh.position.clone(), 1.1);
+              car.mesh.position.z = -car.mesh.position.z;
+            }
+          });
+        } else {
+          // Enemy / SAM projectile hitting Player
+          if (playerTargetPos.distanceTo(p.pos) < 4.8) {
+            hit = true;
+            triggerExplosion(p.pos.clone(), 1.2);
+            state.health = Math.max(10, state.health - (p.isSAM ? 25 : 8));
+            if (state.health <= 15) {
+              state.health = 100;
+              addBotFeedMessage('🛠️ تم إصلاح الدروع واستعادة الطاقة الكاملة 100%');
+            }
+          }
+        }
+
+        if (hit || p.life <= 0) {
+          if (hit && p.explosive) triggerExplosion(p.pos.clone(), 1.0);
+          scene.remove(p.mesh);
+          state.projectiles.splice(i, 1);
+        }
+      }
+
+      document.getElementById('hud-health').textContent = state.health;
+      document.getElementById('hud-kills').textContent = state.kills;
+    }
+
+    function updateAIBots(dt) {
+      const behaviorMult = state.botBehavior === 1 ? 1.55 : (state.botBehavior === 2 ? 1.85 : 1.0);
+      const playerTargetPos = state.controlMode === 'vehicle' && state.activeVehicle
+        ? state.activeVehicle.pos
+        : state.player.pos;
+
+      // 1. AI Aircraft
       state.aiPlanes.forEach((bot, idx) => {
         bot.angle += bot.speed * behaviorMult * dt;
         let tx = bot.centerX + Math.cos(bot.angle) * bot.radius;
         let tz = bot.centerZ + Math.sin(bot.angle) * bot.radius;
         let ty = bot.baseAlt + Math.sin(bot.angle * 2 + idx) * 14;
 
-        // If in Action/Pursuit mode, bots fly closer to the player's airspace
         if (state.botBehavior === 2) {
-          const targetPos = state.controlMode === 'vehicle' && state.activeVehicle ? state.activeVehicle.pos : state.player.pos;
-          tx = targetPos.x + Math.cos(bot.angle * 1.5 + idx) * 95;
-          tz = targetPos.z + Math.sin(bot.angle * 1.5 + idx) * 95;
-          ty = Math.max(48, targetPos.y + 22 + (idx % 3) * 12);
+          tx = playerTargetPos.x + Math.cos(bot.angle * 1.5 + idx) * 95;
+          tz = playerTargetPos.z + Math.sin(bot.angle * 1.5 + idx) * 95;
+          ty = Math.max(48, playerTargetPos.y + 22 + (idx % 3) * 12);
+
+          bot.fireTimer -= dt;
+          if (bot.fireTimer <= 0 && bot.mesh.position.distanceTo(playerTargetPos) < 220) {
+            bot.fireTimer = 3.5 + Math.random() * 3;
+            const dir = playerTargetPos.clone().sub(bot.mesh.position).normalize();
+            spawnProjectile({
+              pos: bot.mesh.position.clone(),
+              vel: dir.multiplyScalar(140),
+              color: 0xf43f5e,
+              radius: 0.25,
+              explosive: false,
+              fromPlayer: false,
+              life: 2.2
+            });
+          }
         }
 
         const dx = tx - bot.mesh.position.x;
@@ -1731,7 +2303,7 @@
         }
       });
 
-      // 2. Update AI Traffic Cars on City Roads
+      // 2. AI Traffic Cars
       state.aiCars.forEach(car => {
         const step = car.speed * behaviorMult * dt * car.dir;
         if (car.axis === 'z') {
@@ -1745,35 +2317,34 @@
         }
       });
 
-      // 3. Update AI Pedestrians walking on sidewalks & airport plaza
+      // 3. AI Stylized Character Bots
       state.aiPeds.forEach(ped => {
         ped.timer -= dt;
         if (ped.timer <= 0) {
           ped.yaw += (Math.random() - 0.5) * Math.PI * 1.2;
           ped.timer = 2.5 + Math.random() * 4;
         }
-        const walkSpd = 3.2;
+        const walkSpd = state.botBehavior === 2 ? 5.2 : 3.2;
         ped.mesh.position.x += Math.sin(ped.yaw) * walkSpd * dt;
         ped.mesh.position.z += Math.cos(ped.yaw) * walkSpd * dt;
 
-        // Keep pedestrians near their district
         if (Math.hypot(ped.mesh.position.x - ped.originX, ped.mesh.position.z - ped.originZ) > 38) {
           ped.yaw = Math.atan2(ped.originX - ped.mesh.position.x, ped.originZ - ped.mesh.position.z);
         }
 
         ped.mesh.rotation.y = ped.yaw;
-        ped.walkPhase += dt * 6;
+        ped.walkPhase += dt * (state.botBehavior === 2 ? 9 : 6);
         const limbs = ped.mesh.userData.limbs;
         if (limbs) {
-          const s = Math.sin(ped.walkPhase) * 0.45;
+          const s = Math.sin(ped.walkPhase) * 0.48;
           limbs.leftLeg.rotation.x = s;
           limbs.rightLeg.rotation.x = -s;
           limbs.leftArm.rotation.x = -s * 0.7;
-          limbs.rightArm.rotation.x = s * 0.7;
+          limbs.rightArm.rotation.x = s * 0.5;
         }
       });
 
-      // 4. Update Particles & Flares
+      // 4. Particles
       for (let i = state.particles.length - 1; i >= 0; i--) {
         const pt = state.particles[i];
         pt.life -= dt;
@@ -1789,12 +2360,12 @@
     }
 
     // =========================================================================
-    // CAMERA SYSTEM (3RD PERSON CHASE, 1ST PERSON COCKPIT, CINEMATIC ORBIT)
+    // CAMERA & HUD
     // =========================================================================
     function updateCamera(dt) {
       if (state.controlMode === 'walk') {
-        const target = state.player.pos.clone().add(new THREE.Vector3(0, 2.1, 0));
-        const dist = state.cameraMode === 1 ? 0.4 : 8.5;
+        const target = state.player.pos.clone().add(new THREE.Vector3(0, 2.2, 0));
+        const dist = state.cameraMode === 1 ? 0.4 : 8.2;
         const cx = target.x + Math.sin(state.camYaw) * Math.cos(state.camPitch) * dist;
         const cy = Math.max(0.8, target.y + Math.sin(state.camPitch) * dist);
         const cz = target.z + Math.cos(state.camYaw) * Math.cos(state.camPitch) * dist;
@@ -1807,14 +2378,12 @@
       if (!v) return;
 
       if (state.cameraMode === 1) {
-        // 1st-Person Cockpit Interior View
         const forward = new THREE.Vector3(Math.sin(v.yaw) * Math.cos(v.pitch), Math.sin(v.pitch), Math.cos(v.yaw) * Math.cos(v.pitch));
         const cockpitOffset = new THREE.Vector3(0, 2.35, 0).addScaledVector(forward, 1.8);
         camera.position.copy(v.pos).add(cockpitOffset);
         const lookTarget = camera.position.clone().addScaledVector(forward, 60);
         camera.lookAt(lookTarget);
       } else if (state.cameraMode === 2) {
-        // Cinematic Orbit View
         const angle = performance.now() * 0.00045;
         const dist = state.camDistance * 1.25;
         camera.position.set(
@@ -1824,11 +2393,8 @@
         );
         camera.lookAt(v.pos.clone().add(new THREE.Vector3(0, 1.8, 0)));
       } else {
-        // Smooth 3rd-Person Chase Camera
         const chaseYaw = state.isDragging ? state.camYaw : (v.yaw + Math.PI);
-        if (!state.isDragging) {
-          state.camYaw = chaseYaw;
-        }
+        if (!state.isDragging) state.camYaw = chaseYaw;
         const dist = state.camDistance;
         const desired = new THREE.Vector3(
           v.pos.x + Math.sin(chaseYaw) * dist,
@@ -1840,9 +2406,6 @@
       }
     }
 
-    // =========================================================================
-    // HUD, COCKPIT INSTRUMENTS & RADAR MINIMAP RENDERING
-    // =========================================================================
     const radarCanvas = document.getElementById('radar-canvas');
     const radarCtx = radarCanvas.getContext('2d');
 
@@ -1861,7 +2424,6 @@
         refPos = v.pos;
         refYaw = v.yaw;
 
-        // Cockpit HUD Instruments
         if (state.cameraMode === 1) {
           document.getElementById('cockpit-speed').textContent = `${Math.round(spd * 0.54)} KT`;
           document.getElementById('cockpit-alt').textContent = `${Math.round(alt * 3.28)} FT`;
@@ -1888,44 +2450,42 @@
       document.getElementById('hud-throttle-pct').textContent = `${thr}%`;
       document.getElementById('hud-throttle-bar').style.width = `${thr}%`;
 
-      // Draw Live Radar Minimap
       radarCtx.fillStyle = '#050b16';
-      radarCtx.fillRect(0, 0, 150, 150);
+      radarCtx.fillRect(0, 0, 155, 155);
 
-      // Radar rings
       radarCtx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
       radarCtx.lineWidth = 1;
-      [30, 58].forEach(r => {
+      [32, 62].forEach(r => {
         radarCtx.beginPath();
-        radarCtx.arc(75, 75, r, 0, Math.PI * 2);
+        radarCtx.arc(77, 77, r, 0, Math.PI * 2);
         radarCtx.stroke();
       });
 
       const scale = 0.14;
       const toRadar = (wx, wz) => ({
-        x: 75 + (wx - refPos.x) * scale,
-        y: 75 + (wz - refPos.z) * scale
+        x: 77 + (wx - refPos.x) * scale,
+        y: 77 + (wz - refPos.z) * scale
       });
 
-      // Draw Airport Runways on Radar
+      // Runways
       radarCtx.fillStyle = 'rgba(148, 163, 184, 0.35)';
       const rwyPos = toRadar(330, 0);
       radarCtx.fillRect(rwyPos.x - 3, rwyPos.y - 35, 6, 70);
 
-      // Draw Parked World Vehicles (Cyan dots)
-      state.worldVehicles.forEach(v => {
-        if (v === state.activeVehicle) return;
-        const p = toRadar(v.pos.x, v.pos.z);
-        if (p.x >= 4 && p.x <= 146 && p.y >= 4 && p.y <= 146) {
-          radarCtx.fillStyle = '#38bdf8';
-          radarCtx.fillRect(p.x - 2, p.y - 2, 4, 4);
+      // SAM Batteries (Red squares)
+      state.samSites.forEach(sam => {
+        if (!sam.alive) return;
+        const p = toRadar(sam.pos.x, sam.pos.z);
+        if (p.x >= 4 && p.x <= 150 && p.y >= 4 && p.y <= 150) {
+          radarCtx.fillStyle = '#ef4444';
+          radarCtx.fillRect(p.x - 3, p.y - 3, 6, 6);
         }
       });
 
-      // Draw AI Planes (Sky Blue triangles)
+      // AI Planes (Blue circles)
       state.aiPlanes.forEach(b => {
         const p = toRadar(b.mesh.position.x, b.mesh.position.z);
-        if (p.x >= 4 && p.x <= 146 && p.y >= 4 && p.y <= 146) {
+        if (p.x >= 4 && p.x <= 150 && p.y >= 4 && p.y <= 150) {
           radarCtx.fillStyle = '#0ea5e9';
           radarCtx.beginPath();
           radarCtx.arc(p.x, p.y, 3, 0, Math.PI * 2);
@@ -1933,27 +2493,18 @@
         }
       });
 
-      // Draw AI Cars (Yellow dots)
-      state.aiCars.forEach(c => {
-        const p = toRadar(c.mesh.position.x, c.mesh.position.z);
-        if (p.x >= 4 && p.x <= 146 && p.y >= 4 && p.y <= 146) {
-          radarCtx.fillStyle = '#facc15';
-          radarCtx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
-        }
-      });
-
-      // Draw AI Pedestrians (Purple dots)
+      // AI Pedestrians (Purple dots)
       state.aiPeds.forEach(ped => {
         const p = toRadar(ped.mesh.position.x, ped.mesh.position.z);
-        if (p.x >= 4 && p.x <= 146 && p.y >= 4 && p.y <= 146) {
+        if (p.x >= 4 && p.x <= 150 && p.y >= 4 && p.y <= 150) {
           radarCtx.fillStyle = '#c084fc';
           radarCtx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
         }
       });
 
-      // Player Center Marker (Green Arrow)
+      // Player Center Marker
       radarCtx.save();
-      radarCtx.translate(75, 75);
+      radarCtx.translate(77, 77);
       radarCtx.rotate(-refYaw + Math.PI);
       radarCtx.fillStyle = '#4ade80';
       radarCtx.beginPath();
@@ -1973,10 +2524,10 @@
 
       if (state.controlMode === 'vehicle' && state.activeVehicle) {
         const spec = state.activeVehicle.spec;
-        badge.textContent = spec.category === 'car' ? 'وضع قيادة السيارة' : 'وضع الطيران والتحكم الجوي';
+        badge.textContent = spec.category === 'car' ? 'وضع قيادة السيارة' : 'وضع طيران GTA والقتال الجوي';
         badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-sky-500/25 text-sky-300 border border-sky-400/50';
-        label.textContent = `المركبة الحالية: ${spec.name}`;
-        statusEl.textContent = spec.category === 'car' ? 'محرك نشط' : 'جاهز للطيران';
+        label.textContent = `المركبة: ${spec.name} (اضغط Z للرشاش و M للصواريخ)`;
+        statusEl.textContent = spec.category === 'car' ? 'محرك نشط' : 'طيران متوازن';
         if (spec.category === 'aircraft') {
           sysRow.classList.remove('hidden');
         } else {
@@ -1985,8 +2536,8 @@
       } else {
         badge.textContent = 'وضع المشي الحر';
         badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
-        label.textContent = 'الشخصية: طيار ومستكشف المدينة (اقترب من أي طائرة واضغط F)';
-        statusEl.textContent = 'على الأقدام';
+        label.textContent = 'الشخصية: مقاتل وطيار المدينة (اضغط 1-4 للأسلحة و F لركوب الطائرات)';
+        statusEl.textContent = 'مسلح وجاهز';
         sysRow.classList.add('hidden');
       }
     }
@@ -2003,7 +2554,7 @@
     }
 
     // =========================================================================
-    // UI CONTROLS, MODALS & EVENT LISTENERS
+    // UI EVENTS & HANDLERS
     // =========================================================================
     function renderFleetModal() {
       const grid = document.getElementById('fleet-grid');
@@ -2043,9 +2594,7 @@
         state.keys[e.code] = true;
 
         if (e.code === 'KeyF' || e.code === 'KeyE') {
-          if (state.controlMode === 'walk' || e.code === 'KeyF') {
-            toggleBoardOrExit();
-          }
+          if (state.controlMode === 'walk' || e.code === 'KeyF') toggleBoardOrExit();
         } else if (e.code === 'KeyC') {
           cycleCameraMode();
         } else if (e.code === 'KeyG') {
@@ -2054,6 +2603,16 @@
           toggleSmokeTrail();
         } else if (e.code === 'KeyX') {
           fireCountermeasureFlares();
+        } else if (e.code === 'KeyM') {
+          fireGuidedMissile();
+        } else if (e.code === 'Digit1') {
+          selectWeapon(0);
+        } else if (e.code === 'Digit2') {
+          selectWeapon(1);
+        } else if (e.code === 'Digit3') {
+          selectWeapon(2);
+        } else if (e.code === 'Digit4') {
+          selectWeapon(3);
         }
       });
 
@@ -2061,10 +2620,10 @@
         state.keys[e.code] = false;
       });
 
-      // Mouse Camera Orbit & Zoom
       canvas.addEventListener('mousedown', (e) => {
         soundEngine.init();
         state.isDragging = true;
+        state.mouseDownTime = performance.now();
         state.lastMouseX = e.clientX;
         state.lastMouseY = e.clientY;
       });
@@ -2080,6 +2639,10 @@
       });
 
       window.addEventListener('mouseup', () => {
+        // Quick click fires weapon!
+        if (performance.now() - state.mouseDownTime < 210) {
+          firePrimaryWeapon();
+        }
         state.isDragging = false;
       });
 
@@ -2093,7 +2656,28 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
       });
 
-      // Top & Bottom Buttons
+      // Weapon Selector Buttons
+      document.getElementById('btn-wpn-1').addEventListener('click', () => selectWeapon(0));
+      document.getElementById('btn-wpn-2').addEventListener('click', () => selectWeapon(1));
+      document.getElementById('btn-wpn-3').addEventListener('click', () => selectWeapon(2));
+      document.getElementById('btn-wpn-4').addEventListener('click', () => selectWeapon(3));
+      document.getElementById('btn-fire-weapon').addEventListener('click', () => {
+        soundEngine.init();
+        firePrimaryWeapon();
+      });
+      document.getElementById('btn-fire-missile').addEventListener('click', () => {
+        soundEngine.init();
+        fireGuidedMissile();
+      });
+
+      document.getElementById('btn-toggle-sam').addEventListener('click', () => {
+        state.samActive = !state.samActive;
+        const btn = document.getElementById('btn-toggle-sam');
+        btn.textContent = state.samActive
+          ? '🛡️ منظومة الدفاع الجوي (SAM): نشطة وتطلق صواريخ'
+          : '🛡️ منظومة الدفاع الجوي (SAM): متوقفة (طيران آمن)';
+      });
+
       document.getElementById('btn-spawn-menu').addEventListener('click', () => {
         soundEngine.init();
         document.getElementById('modal-fleet').classList.toggle('hidden');
@@ -2150,7 +2734,7 @@
         const labels = [
           '🎯 سلوك البوتات: حياة طبيعية + طيران حر',
           '🏁 سلوك البوتات: عرض جوي وسباق سريع',
-          '🔥 سلوك البوتات: مطاردة جوية حولك'
+          '🔥 سلوك البوتات: مود قتال شامل وحرب جوية'
         ];
         document.getElementById('btn-bot-mode').textContent = labels[state.botBehavior];
         addBotFeedMessage(labels[state.botBehavior]);
@@ -2243,11 +2827,11 @@
     let lastTime = performance.now();
     let botFeedTimer = 0;
     const botFeedTemplates = [
+      '🛡️ رادار الدفاع الجوي (SAM) يمسح المجال الجوي للمدينة والمطار',
       '✈️ بوت [كابتن طارق] يحلق بمقاتلة F-22 فوق أبراج وسط المدينة',
-      '🛫 بوت [كابتن ليلى] تستعد للإقلاع بطائرة بوينج 747 من المدرج 2',
-      '🚁 مروحية أباتشي تقوم بدورية جوية قرب الجسر الساحلي',
-      '🚗 حركة مرور نشطة للبوتات في تقاطع وسط المدينة والمطار',
-      '💨 طائرة الاستعراض البهلوانية ترسم دخاناً أبيض في السماء'
+      '👮 دوريات الشرطة والجنود يتجولون في شوارع المدينة وساحة المطار',
+      '🚁 مروحية أباتشي تقوم بدورية قتالية قرب الجسر الساحلي',
+      '🔫 يمكنك التبديل بين الأسلحة بالأزرار 1-4 وإطلاق الصواريخ بزر M'
     ];
 
     function animate(now) {
@@ -2255,9 +2839,7 @@
       const dt = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
 
-      if (radarDish) {
-        radarDish.rotation.y += dt * 1.6;
-      }
+      if (radarDish) radarDish.rotation.y += dt * 1.6;
 
       if (state.controlMode === 'walk') {
         updatePlayerWalking(dt);
@@ -2265,6 +2847,7 @@
         updateActiveVehiclePhysics(dt);
       }
 
+      updateSAMAndProjectiles(dt);
       updateAIBots(dt);
       updateCamera(dt);
       updateHUDAndRadar();
